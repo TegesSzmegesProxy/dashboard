@@ -12,6 +12,25 @@ export type PolicyLifecycleState =
   | 'PENDING_APPROVAL'
   | 'REJECTED';
 
+/** How a policy version was produced. Documents without one were imported. */
+export type PolicyVersionOrigin =
+  | { kind: 'import' }
+  | {
+      kind: 'generation';
+      attemptId: string;
+      analysisId: string;
+      aiProvider: string;
+      aiModel: string;
+    }
+  | {
+      kind: 'edit';
+      attemptId: string;
+      parentVersion: string;
+      analysisId: string | null;
+      aiProvider: string;
+      aiModel: string;
+    };
+
 export interface PolicyVersionDocument {
   _id: ObjectId;
   organizationId: ObjectId;
@@ -29,6 +48,7 @@ export interface PolicyVersionDocument {
   };
   approvalStatus: ApprovalStatus;
   rejectionReason?: string;
+  origin?: PolicyVersionOrigin;
   createdBy: string;
   createdAt: Date;
   lifecycleUpdatedAt: Date;
@@ -58,6 +78,9 @@ export interface PolicyVersionView {
   approvalStatus: ApprovalStatus;
   rejectionReason: string | null;
   state: PolicyLifecycleState;
+  origin: PolicyVersionOrigin;
+  /** Set for AI-produced versions; reviewers must see it before approval. */
+  precisionWarning: string | null;
   createdBy: string;
   createdAt: Date;
   lifecycleUpdatedAt: Date;

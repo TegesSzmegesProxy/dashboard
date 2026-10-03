@@ -66,5 +66,5 @@ pattern matching; customers must not rely on it instead of keeping secrets
 out of Git. Self-hosted Git servers and other providers are unsupported. The
 GitHub fork network can make fork commits reachable through the parent
 repository. Analyses cannot be re-run from a deleted raw package; a new
-upload is required. The outbox has no relay yet; Phase 6 adds the consumer
-for `AnalysisCompleted`.
+upload is required. The outbox has no external relay; Phase 6 consumes
+`AnalysisCompleted` in-process (ADR-0007).

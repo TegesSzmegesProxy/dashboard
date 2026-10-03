@@ -386,6 +386,126 @@ paths:
         - bearer: []
       tags:
         - proxy status
+  /api/v1/proxy/telemetry:
+    post:
+      operationId: ProxyTelemetryController_record
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryBatchV1Dto'
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - proxy distribution
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/operations:
+    get:
+      operationId: OperationsController_overview
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - operations
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/telemetry:
+    get:
+      operationId: OperationsController_summary
+      parameters:
+        - name: granularity
+          required: false
+          in: query
+          schema:
+            default: minute
+            type: string
+            enum:
+              - minute
+              - hour
+        - name: from
+          required: false
+          in: query
+          description: >-
+            Inclusive start; defaults to 1 hour (minute) or 24 hours (hour)
+            before to
+          schema:
+            type: string
+        - name: to
+          required: false
+          in: query
+          description: Exclusive end; defaults to now
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - operations
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/alerts:
+    get:
+      operationId: OperationsController_listAlerts
+      parameters:
+        - name: status
+          required: false
+          in: query
+          schema:
+            default: open
+            type: string
+            enum:
+              - open
+              - resolved
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - operations
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/alerts/{alertId}/acknowledge:
+    post:
+      operationId: OperationsController_acknowledge
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - operations
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/alert-settings:
+    get:
+      operationId: OperationsController_settings
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - operations
+    put:
+      operationId: OperationsController_updateSettings
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertSettingsDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - operations
   /api/v1/organizations/{organizationId}/github-installations:
     post:
       operationId: SourceRepositoriesController_linkInstallation
@@ -527,6 +647,71 @@ paths:
         - bearer: []
       tags:
         - analyses
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policy-generations:
+    post:
+      operationId: PolicyGenerationController_generate
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeneratePolicyDto'
+      responses:
+        '202':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - policy generation
+    get:
+      operationId: PolicyGenerationController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - policy generation
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policies/{version}/edits:
+    post:
+      operationId: PolicyGenerationController_edit
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditPolicyDto'
+      responses:
+        '202':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - policy generation
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policy-generations/{attemptId}:
+    get:
+      operationId: PolicyGenerationController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - policy generation
   /api/v1/health:
     get:
       operationId: HealthController_getHealth
@@ -846,6 +1031,188 @@ components:
         - supportedToolRegistries
         - health
         - tenants
+    TelemetryDecisionCountsV1Dto:
+      type: object
+      properties:
+        allow:
+          type: number
+          minimum: 0
+        block:
+          type: number
+          minimum: 0
+      required:
+        - allow
+        - block
+    TelemetryStaticVerdictCountsV1Dto:
+      type: object
+      properties:
+        safe:
+          type: number
+          minimum: 0
+        suspicious:
+          type: number
+          minimum: 0
+        policyViolation:
+          type: number
+          minimum: 0
+        error:
+          type: number
+          minimum: 0
+      required:
+        - safe
+        - suspicious
+        - policyViolation
+        - error
+    TelemetryJevCountsV1Dto:
+      type: object
+      properties:
+        sampledSafe:
+          type: number
+          minimum: 0
+          description: SAFE requests selected by sampling
+        attack:
+          type: number
+          minimum: 0
+        benign:
+          type: number
+          minimum: 0
+        unavailable:
+          type: number
+          minimum: 0
+      required:
+        - sampledSafe
+        - attack
+        - benign
+        - unavailable
+    TelemetryEndpointV1Dto:
+      type: object
+      properties:
+        endpoint:
+          type: string
+          nullable: true
+          example: POST /users/:id
+          description: >-
+            Policy endpoint key from the loaded bundle; null aggregates requests
+            that matched no policy endpoint
+        decisions:
+          $ref: '#/components/schemas/TelemetryDecisionCountsV1Dto'
+        staticVerdicts:
+          $ref: '#/components/schemas/TelemetryStaticVerdictCountsV1Dto'
+        jev:
+          $ref: '#/components/schemas/TelemetryJevCountsV1Dto'
+        failureBehaviorApplied:
+          type: number
+          minimum: 0
+          description: Decisions taken by the tenant failure behavior
+        samplingRate:
+          type: object
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: Sampling rate in effect at the end of the window
+        attackRateEwma:
+          type: object
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: Endpoint attack-rate EWMA at the end of the window
+      required:
+        - endpoint
+        - decisions
+        - staticVerdicts
+        - jev
+        - failureBehaviorApplied
+    TelemetryTenantEventsV1Dto:
+      type: object
+      properties:
+        bundleVerificationFailures:
+          type: number
+          minimum: 0
+        bundlePullFailures:
+          type: number
+          minimum: 0
+        droppedWindows:
+          type: number
+          minimum: 0
+          description: Earlier telemetry windows the proxy dropped
+      required:
+        - bundleVerificationFailures
+        - bundlePullFailures
+        - droppedWindows
+    TelemetryWindowV1Dto:
+      type: object
+      properties:
+        tenantId:
+          type: string
+        bundleVersion:
+          type: string
+          nullable: true
+          description: Bundle loaded during the window; null when none is loaded
+        windowStart:
+          type: string
+          example: '2026-10-03T12:34:00.000Z'
+        endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/TelemetryEndpointV1Dto'
+        events:
+          $ref: '#/components/schemas/TelemetryTenantEventsV1Dto'
+        attackRateEwma:
+          type: object
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: Tenant attack-rate EWMA at the end of the window
+      required:
+        - tenantId
+        - bundleVersion
+        - windowStart
+        - endpoints
+        - events
+    TelemetryBatchV1Dto:
+      type: object
+      properties:
+        schemaVersion:
+          type: string
+          enum:
+            - tessera.telemetry/v1
+        instanceId:
+          type: string
+          description: Same instance id as in heartbeats
+        batchId:
+          type: string
+          description: Random per batch; retries reuse it
+        windows:
+          type: array
+          items:
+            $ref: '#/components/schemas/TelemetryWindowV1Dto'
+      required:
+        - schemaVersion
+        - instanceId
+        - batchId
+        - windows
+    AlertSettingsDto:
+      type: object
+      properties:
+        attackRateThreshold:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: >-
+            Open an attack-rate alert when the last hour exceeds this ATTACK
+            share of JEV-classified requests. null disables it; there is no
+            default.
+        attackRateMinClassified:
+          type: number
+          nullable: true
+          minimum: 1
+          description: >-
+            Minimum JEV-classified requests in the last hour before the
+            threshold applies. Required with attackRateThreshold.
+      required:
+        - attackRateThreshold
+        - attackRateMinClassified
     LinkGitHubInstallationDto:
       type: object
       properties:
@@ -1030,3 +1397,22 @@ components:
         - collector
         - environment
         - redaction
+    GeneratePolicyDto:
+      type: object
+      properties:
+        analysisId:
+          type: string
+          description: Completed or partial analysis of this project
+      required:
+        - analysisId
+    EditPolicyDto:
+      type: object
+      properties:
+        instruction:
+          type: string
+          maxLength: 2000
+          description: >-
+            Natural-language change to the base version. The result is a new
+            version that must be reviewed; see precisionWarning.
+      required:
+        - instruction

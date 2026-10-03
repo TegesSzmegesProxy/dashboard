@@ -51,7 +51,7 @@ safe metadata; reveal plaintext once at creation.
 collector upload (commit SHA + environment results)
   -> source fetch from the bound repository, filtering and redaction
   -> application analysis
-  -> policy generation or human import/edit
+  -> policy generation or natural-language edit (AI, ADR-0007) or human import
   -> schema validation
   -> compilation against the supported tool registry
   -> human approval
@@ -85,6 +85,11 @@ the bundle schemas and tool registries they support in request headers, and
 poll with `If-None-Match`. They report loaded versions to
 `POST /api/v1/proxy/heartbeats`, so the dashboard can show `restart required`
 and incompatible proxies. Heartbeats never affect distribution.
+
+Proxies send batched, redacted `tessera.telemetry/v1` counters to
+`POST /api/v1/proxy/telemetry` (ADR-0008). Endpoints are identified only by
+policy endpoint keys of the loaded bundle. Telemetry intake and operational
+alerts are separate from distribution and never change it.
 
 ## Data and infrastructure
 

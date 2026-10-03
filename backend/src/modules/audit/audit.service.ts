@@ -5,7 +5,10 @@ import { MongoDatabase } from '../../infrastructure/database/mongo-database.serv
 export interface AuditRecord {
   organizationId: ObjectId;
   tenantId?: ObjectId;
-  /** Dashboard subject, or `machine:<apiKeyId>` for machine credentials. */
+  /**
+   * Dashboard subject, `machine:<apiKeyId>` for machine credentials, or
+   * `system:<workflow>` for automatic control-plane workflows.
+   */
   actorSubject: string;
   action: string;
   targetType:
@@ -19,7 +22,10 @@ export interface AuditRecord {
     | 'githubInstallation'
     | 'tenantRepository'
     | 'analysisUpload'
-    | 'analysis';
+    | 'analysis'
+    | 'policyGeneration'
+    | 'operationalAlert'
+    | 'alertSettings';
   targetId: string;
   metadata?: Record<string, string>;
 }

@@ -15,6 +15,7 @@ import { HealthModule } from './modules/health/health.module.js';
 import { OrganizationsModule } from './modules/organizations/organizations.module.js';
 import { PoliciesModule } from './modules/policies/policies.module.js';
 import { PolicyCompilerModule } from './modules/policy-compiler/policy-compiler.module.js';
+import { PolicyGenerationModule } from './modules/policy-generation/policy-generation.module.js';
 import { PolicyLifecycleModule } from './modules/policy-lifecycle/policy-lifecycle.module.js';
 import { ProjectsModule } from './modules/projects/projects.module.js';
 import { SourceRepositoriesModule } from './modules/source-repositories/source-repositories.module.js';
@@ -44,6 +45,7 @@ import { TelemetryModule } from './modules/telemetry/telemetry.module.js';
     SourceRepositoriesModule,
     AnalysesModule,
     AnalysisUploadsModule,
+    PolicyGenerationModule,
     HealthModule,
   ],
 })

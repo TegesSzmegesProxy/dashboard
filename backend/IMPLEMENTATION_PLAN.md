@@ -216,6 +216,18 @@ exercised yet.
 Exit criteria: invalid AI output creates a failed attempt and never a runnable
 or active policy.
 
+Decision: each generation or edit is a durable policy generation attempt.
+`AnalysisCompleted` queues generation automatically; dashboard users can
+request generation or a natural-language edit with an `Idempotency-Key`. AI
+output (`tessera.ai-policy/v1`) must match the contract, contain no detectable
+credential, compile, and reference only endpoints and fields known to the
+linked analysis. Successful attempts create pending, compiled versions with
+an origin and a fixed precision warning; failed attempts create none. See
+ADR-0007.
+
+Status: implemented and manually verified against MongoDB with a stubbed AI
+provider. A real Claude call has not been exercised yet.
+
 ### Phase 7 — telemetry and operations
 
 - Ingest best-effort, batched, redacted counters and health reports.
@@ -226,6 +238,16 @@ or active policy.
 
 Exit criteria: telemetry outages do not affect bundle distribution or proxy
 decisions, and sensitive request data is absent from storage and logs.
+
+Decision: telemetry uses `tessera.telemetry/v1` minute windows of counters
+and gauges, keyed only by policy endpoints of the loaded bundle. Minute
+buckets are kept 48 hours and hourly buckets 90 days. A per-tenant hourly
+quota is enforced in MongoDB. Alerts are dashboard-only with outbox events
+for later delivery, and the attack-rate alert is opt-in per project with no
+default threshold. See ADR-0008.
+
+Status: control-plane side implemented and manually verified against MongoDB
+with simulated proxy batches. The proxy does not send telemetry yet.
 
 ## 7. Verification policy — no automated tests
 

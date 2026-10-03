@@ -22,6 +22,8 @@ export interface Environment {
   GITHUB_APP_CLIENT_SECRET?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_ANALYSIS_MODEL: string;
+  ANTHROPIC_POLICY_MODEL: string;
+  TELEMETRY_QUOTA_ENTRIES_PER_TENANT_HOUR: number;
 }
 
 export const environmentSchema = Joi.object<Environment>({
@@ -61,6 +63,11 @@ export const environmentSchema = Joi.object<Environment>({
   GITHUB_APP_CLIENT_SECRET: Joi.string().empty('').min(1),
   ANTHROPIC_API_KEY: Joi.string().empty('').min(1),
   ANTHROPIC_ANALYSIS_MODEL: Joi.string().trim().default('claude-opus-5-5'),
+  ANTHROPIC_POLICY_MODEL: Joi.string().trim().default('claude-opus-5-5'),
+  TELEMETRY_QUOTA_ENTRIES_PER_TENANT_HOUR: Joi.number()
+    .integer()
+    .min(1)
+    .default(100_000),
 })
   // The GitHub App is configured completely or not at all.
   .and(

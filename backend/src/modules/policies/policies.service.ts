@@ -13,20 +13,46 @@ import {
   CursorPage,
   CursorPaginationDto,
 } from '../../common/cursor-pagination.js';
+import { assertIdempotencyKey } from '../../common/idempotency-key.js';
 import { isDuplicateKey, objectId } from '../../common/mongodb.js';
-import { TOOL_REGISTRY_VERSION } from '../../contracts/policy/v1/policy.contract.js';
+import { NATURAL_LANGUAGE_PRECISION_WARNING } from '../../contracts/policy-generation/v1/ai-policy.contract.js';
+import {
+  StructuredPolicyV1Dto,
+  TOOL_REGISTRY_VERSION,
+} from '../../contracts/policy/v1/policy.contract.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { BundlesService } from '../bundles/bundles.service.js';
 import { OutboxService } from '../events/outbox.service.js';
 import { PolicyCompilerService } from '../policy-compiler/policy-compiler.service.js';
+import type { CompiledPolicyV1 } from '../policy-compiler/policy-compiler.types.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { ImportPolicyDto } from './policy.dto.js';
 import {
   ActivePolicyPointerDocument,
   PolicyVersionDocument,
+  PolicyVersionOrigin,
   PolicyVersionView,
 } from './policy.types.js';
+
+export interface GeneratedPolicyVersionInput {
+  organizationId: ObjectId;
+  tenantId: ObjectId;
+  humanReadableIntent: string;
+  structuredPolicy: StructuredPolicyV1Dto;
+  /** Output of a successful compilation of `structuredPolicy`. */
+  compiledPolicy: CompiledPolicyV1;
+  origin: Exclude<PolicyVersionOrigin, { kind: 'import' }>;
+  actorSubject: string;
+}
+
+/** Read-only policy content used as the base of a natural-language edit. */
+export interface PolicyContent {
+  version: string;
+  humanReadableIntent: string;
+  structuredPolicy: StructuredPolicyV1Dto;
+  origin: PolicyVersionOrigin;
+}
 
 type ApprovalDecision = 'approve' | 'reject';
 type LifecycleOperation = ApprovalDecision | 'activate';
@@ -84,12 +110,7 @@ export class PoliciesService implements OnModuleInit {
     actorSubject: string,
   ): Promise<PolicyVersionView> {
     const normalizedIntent = dto.humanReadableIntent.trim();
-    const version = this.contentHash({
-      schemaVersion: dto.structuredPolicy.schemaVersion,
-      toolRegistryVersion: TOOL_REGISTRY_VERSION,
-      humanReadableIntent: normalizedIntent,
-      structuredPolicy: dto.structuredPolicy,
-    } as unknown as JsonValue);
+    const version = this.versionHash(normalizedIntent, dto.structuredPolicy);
     const compilation = this.compiler.compile(dto.structuredPolicy);
 
     try {
@@ -127,6 +148,7 @@ export class PoliciesService implements OnModuleInit {
           compilationStatus: compilation.ok ? 'compiled' : 'failed',
           compilationError: compilation.ok ? undefined : compilation.error,
           approvalStatus: compilation.ok ? 'pending' : 'not_applicable',
+          origin: { kind: 'import' },
           createdBy: actorSubject,
           createdAt: now,
           lifecycleUpdatedAt: now,
@@ -170,6 +192,110 @@ export class PoliciesService implements OnModuleInit {
       }
       throw error;
     }
+  }
+
+  /**
+   * Stores an AI-produced, already compiled policy as a pending version
+   * inside the caller's transaction. Content-identical versions are reused.
+   * Callers must never pass output that failed validation or compilation.
+   */
+  async createGeneratedVersion(
+    input: GeneratedPolicyVersionInput,
+    session: ClientSession,
+  ): Promise<{ version: string; created: boolean }> {
+    const humanReadableIntent = input.humanReadableIntent.trim();
+    const version = this.versionHash(
+      humanReadableIntent,
+      input.structuredPolicy,
+    );
+    const existing = await this.versions.findOne(
+      {
+        organizationId: input.organizationId,
+        tenantId: input.tenantId,
+        version,
+      },
+      { session, projection: { _id: 1 } },
+    );
+    if (existing) return { version, created: false };
+
+    const now = new Date();
+    await this.versions.insertOne(
+      {
+        _id: new ObjectId(),
+        organizationId: input.organizationId,
+        tenantId: input.tenantId,
+        version,
+        schemaVersion: input.structuredPolicy.schemaVersion,
+        toolRegistryVersion: TOOL_REGISTRY_VERSION,
+        humanReadableIntent,
+        structuredPolicy: input.structuredPolicy,
+        compiledPolicy: input.compiledPolicy,
+        compilationStatus: 'compiled',
+        approvalStatus: 'pending',
+        origin: input.origin,
+        createdBy: input.actorSubject,
+        createdAt: now,
+        lifecycleUpdatedAt: now,
+      },
+      { session },
+    );
+    await this.audit.append(
+      {
+        organizationId: input.organizationId,
+        tenantId: input.tenantId,
+        actorSubject: input.actorSubject,
+        action:
+          input.origin.kind === 'edit'
+            ? 'policy-version.edited'
+            : 'policy-version.generated',
+        targetType: 'policyVersion',
+        targetId: version,
+        metadata: { attemptId: input.origin.attemptId },
+      },
+      session,
+    );
+    await this.outbox.append(
+      'PolicyGenerated',
+      input.organizationId,
+      input.tenantId,
+      version,
+      { version, attemptId: input.origin.attemptId, kind: input.origin.kind },
+      session,
+    );
+    await this.outbox.append(
+      'PolicyCompiled',
+      input.organizationId,
+      input.tenantId,
+      version,
+      { version },
+      session,
+    );
+    return { version, created: true };
+  }
+
+  async findContent(
+    organizationId: ObjectId,
+    tenantId: ObjectId,
+    version: string,
+  ): Promise<PolicyContent | null> {
+    const document = await this.versions.findOne(
+      { organizationId, tenantId, version },
+      {
+        projection: {
+          version: 1,
+          humanReadableIntent: 1,
+          structuredPolicy: 1,
+          origin: 1,
+        },
+      },
+    );
+    if (!document) return null;
+    return {
+      version: document.version,
+      humanReadableIntent: document.humanReadableIntent,
+      structuredPolicy: document.structuredPolicy,
+      origin: document.origin ?? { kind: 'import' },
+    };
   }
 
   async list(
@@ -228,7 +354,7 @@ export class PoliciesService implements OnModuleInit {
     idempotencyKey: string | undefined,
     actorSubject: string,
   ): Promise<PolicyVersionView> {
-    this.validateIdempotencyKey(idempotencyKey);
+    assertIdempotencyKey(idempotencyKey);
     if (decision === 'reject' && !reason?.trim()) {
       throw new BadRequestException('Rejection reason is required');
     }
@@ -241,7 +367,7 @@ export class PoliciesService implements OnModuleInit {
       tenantId,
       version,
       decision,
-      idempotencyKey!,
+      idempotencyKey,
       payloadHash,
       async (document, organizationObjectId, tenantObjectId, session) => {
         if (document.compilationStatus !== 'compiled') {
@@ -311,13 +437,13 @@ export class PoliciesService implements OnModuleInit {
     idempotencyKey: string | undefined,
     actorSubject: string,
   ): Promise<PolicyVersionView> {
-    this.validateIdempotencyKey(idempotencyKey);
+    assertIdempotencyKey(idempotencyKey);
     return this.runIdempotent(
       organizationId,
       tenantId,
       version,
       'activate',
-      idempotencyKey!,
+      idempotencyKey,
       this.contentHash({ version }),
       async (document, organizationObjectId, tenantObjectId, session) => {
         if (
@@ -497,6 +623,7 @@ export class PoliciesService implements OnModuleInit {
           : document.approvalStatus === 'rejected'
             ? 'REJECTED'
             : 'PENDING_APPROVAL';
+    const origin = document.origin ?? { kind: 'import' };
     return {
       id: document._id.toHexString(),
       organizationId: document.organizationId.toHexString(),
@@ -512,23 +639,25 @@ export class PoliciesService implements OnModuleInit {
       approvalStatus: document.approvalStatus,
       rejectionReason: document.rejectionReason ?? null,
       state,
+      origin,
+      precisionWarning:
+        origin.kind === 'import' ? null : NATURAL_LANGUAGE_PRECISION_WARNING,
       createdBy: document.createdBy,
       createdAt: document.createdAt,
       lifecycleUpdatedAt: document.lifecycleUpdatedAt,
     };
   }
 
-  private validateIdempotencyKey(value: string | undefined): void {
-    if (
-      !value ||
-      value.length < 16 ||
-      value.length > 200 ||
-      !/^[-\w.]+$/.test(value)
-    ) {
-      throw new BadRequestException(
-        'Idempotency-Key must contain 16-200 safe characters',
-      );
-    }
+  private versionHash(
+    humanReadableIntent: string,
+    structuredPolicy: StructuredPolicyV1Dto,
+  ): string {
+    return this.contentHash({
+      schemaVersion: structuredPolicy.schemaVersion,
+      toolRegistryVersion: TOOL_REGISTRY_VERSION,
+      humanReadableIntent,
+      structuredPolicy,
+    } as unknown as JsonValue);
   }
 
   private contentHash(value: JsonValue): string {

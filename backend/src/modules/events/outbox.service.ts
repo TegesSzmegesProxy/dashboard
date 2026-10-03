@@ -12,7 +12,13 @@ export type OutboxEventType =
   | 'BundleActivated'
   | 'AnalysisRequested'
   | 'AnalysisCompleted'
-  | 'AnalysisFailed';
+  | 'AnalysisFailed'
+  | 'PolicyGenerationRequested'
+  | 'PolicyGenerationSucceeded'
+  | 'PolicyGenerationFailed'
+  | 'PolicyGenerated'
+  | 'OperationalAlertOpened'
+  | 'OperationalAlertResolved';
 
 interface OutboxEventDocument {
   _id: ObjectId;
@@ -25,6 +31,17 @@ interface OutboxEventDocument {
   occurredAt: Date;
   payload: Record<string, string>;
   publishedAt?: Date;
+  /** In-process consumers that have handled this event (inbox receipts). */
+  consumedBy?: string[];
+}
+
+export interface OutboxEvent {
+  eventId: string;
+  eventType: OutboxEventType;
+  organizationId: ObjectId;
+  tenantId: ObjectId;
+  aggregateId: string;
+  payload: Record<string, string>;
 }
 
 @Injectable()
@@ -35,6 +52,7 @@ export class OutboxService implements OnModuleInit {
     await Promise.all([
       this.collection.createIndex({ eventId: 1 }, { unique: true }),
       this.collection.createIndex({ publishedAt: 1, occurredAt: 1 }),
+      this.collection.createIndex({ eventType: 1, consumedBy: 1, _id: 1 }),
     ]);
   }
 
@@ -59,6 +77,43 @@ export class OutboxService implements OnModuleInit {
         occurredAt: new Date(),
         payload,
       },
+      { session },
+    );
+  }
+
+  /**
+   * Oldest events of the given types that `consumer` has not handled yet.
+   * Consumers must handle an event and call `markConsumed` in one
+   * transaction, so every event is processed effectively once.
+   */
+  async findUnconsumed(
+    consumer: string,
+    eventTypes: OutboxEventType[],
+    limit: number,
+  ): Promise<OutboxEvent[]> {
+    const documents = await this.collection
+      .find({ eventType: { $in: eventTypes }, consumedBy: { $ne: consumer } })
+      .sort({ _id: 1 })
+      .limit(limit)
+      .toArray();
+    return documents.map((document) => ({
+      eventId: document.eventId,
+      eventType: document.eventType,
+      organizationId: document.organizationId,
+      tenantId: document.tenantId,
+      aggregateId: document.aggregateId,
+      payload: document.payload,
+    }));
+  }
+
+  async markConsumed(
+    eventId: string,
+    consumer: string,
+    session: ClientSession,
+  ): Promise<void> {
+    await this.collection.updateOne(
+      { eventId },
+      { $addToSet: { consumedBy: consumer } },
       { session },
     );
   }

@@ -84,6 +84,31 @@ repository with `PUT .../projects/:tenantId/repository`. Set
 `partial`. `ANALYSIS_STORAGE_DIR` must be a shared volume when running more
 than one instance.
 
+### Policy generation and editing
+
+When an analysis with an API surface completes, a policy generation attempt
+is queued automatically. Owners and admins can also request one with
+`POST .../projects/:tenantId/policy-generations` (`analysisId`) or edit a
+version in natural language with `POST .../policies/:version/edits`
+(`instruction`); both require an `Idempotency-Key` and return `202` with the
+attempt. Poll `GET .../policy-generations/:attemptId`. AI output is validated,
+compiled and checked against the analysis; a successful attempt references a
+new pending version that still needs approval and activation, and a failed
+attempt creates no version. `ANTHROPIC_POLICY_MODEL` selects the model.
+
+### Telemetry and operations
+
+Proxies send minute windows of redacted counters to
+`POST /api/v1/proxy/telemetry` (`tessera.telemetry/v1`, deployment key with
+`telemetry:write`). Endpoint keys must belong to the policy of the bundle the
+proxy reports as loaded; a retried `batchId` is applied once. Telemetry is
+kept 48 hours at minute and 90 days at hour granularity, and each project has
+an hourly quota (`TELEMETRY_QUOTA_ENTRIES_PER_TENANT_HOUR`). The dashboard
+reads `GET .../projects/:tenantId/operations`, `.../telemetry`, `.../alerts`
+and `.../alert-settings`. Alerts are evaluated every minute and are visible
+only in the dashboard; the attack-rate alert stays off until a threshold is
+set.
+
 The API is available at `http://localhost:5000/api/v1`. Swagger is available
 at `http://localhost:5000/api/v1/docs` when `SWAGGER_ENABLED=true`.
 

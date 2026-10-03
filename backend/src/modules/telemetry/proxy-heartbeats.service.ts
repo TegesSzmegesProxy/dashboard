@@ -24,6 +24,8 @@ import {
   ProxyInstanceView,
 } from './proxy-heartbeat.types.js';
 
+/** Upper bound for unpaginated reads used by operations views and alerts. */
+const MAX_INSTANCES_PER_TENANT = 1_000;
 /** Dashboard display threshold; it never affects distribution. */
 const HEARTBEAT_STALE_AFTER_MS = 5 * 60 * 1000;
 /** Instances that stop reporting are forgotten after this period. */
@@ -152,6 +154,24 @@ export class ProxyHeartbeatsService implements OnModuleInit {
       ),
       nextCursor: hasNextPage ? pageDocuments.at(-1)!._id.toHexString() : null,
     };
+  }
+
+  /** Every known instance of a tenant, for operations views and alerts. */
+  async instanceStates(
+    organizationId: ObjectId,
+    tenantId: ObjectId,
+  ): Promise<ProxyInstanceView[]> {
+    const active = await this.bundles.findActiveSummary(
+      organizationId,
+      tenantId,
+    );
+    const documents = await this.collection
+      .find({ organizationId, tenantId })
+      .sort({ _id: 1 })
+      .limit(MAX_INSTANCES_PER_TENANT)
+      .toArray();
+    const now = Date.now();
+    return documents.map((document) => this.toView(document, active, now));
   }
 
   private toView(

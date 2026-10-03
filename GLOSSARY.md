@@ -27,6 +27,13 @@
   provenance.
 - **Policy version**: immutable human intent plus its validated structured form
   and compilation state. Editing creates a new version.
+- **Policy generation attempt**: one durable request to generate a policy
+  from an analysis or to apply a natural-language edit to a policy version.
+  It succeeds with a pending policy version or fails; a failed attempt never
+  creates a policy version.
+- **Precision warning**: the fixed notice shown with every AI-generated or
+  AI-edited policy version that natural language is imprecise and that the
+  reviewed structured policy, not the text, is what gets enforced.
 - **Compiled policy**: a policy translated into registered proxy tool IDs and
   validated tool configuration. It is not executable application code.
 - **Tool registry**: a versioned allowlist of proxy tool IDs, context types,
@@ -57,5 +64,14 @@
 - **Telemetry**: best-effort redacted proxy health and aggregate decision data.
   It excludes raw request bodies, field values, authorization headers, and
   cookies.
+- **Telemetry window**: one UTC minute of a proxy's counters and gauges for
+  one tenant, reported against the bundle version it had loaded.
+- **Unmatched traffic**: requests that matched no endpoint of the loaded
+  policy. Telemetry reports them as one aggregate and never by raw path.
+- **Attack rate**: the share of JEV-classified requests classified as
+  `ATTACK`. The proxy also reports its smoothed EWMA as a gauge.
+- **Operational alert**: a dashboard notification derived from heartbeats
+  and telemetry. It opens and resolves automatically and never affects
+  distribution or enforcement.
 - **Failure behavior**: explicit tenant configuration for a security-relevant
   failure. Do not silently substitute a fail-open or fail-closed default.

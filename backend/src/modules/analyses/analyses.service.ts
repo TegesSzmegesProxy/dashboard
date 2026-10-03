@@ -11,6 +11,7 @@ import type { StoredObject } from '../../infrastructure/object-storage/object-st
 import { OutboxService } from '../events/outbox.service.js';
 import {
   AnalysisDocument,
+  AnalysisResults,
   AnalysisStatus,
   AnalysisSummaryView,
   AnalysisView,
@@ -22,6 +23,13 @@ export interface EnqueueAnalysisInput {
   uploadId: ObjectId;
   commitSha: string;
   environmentObject: StoredObject;
+}
+
+/** The derived analysis parts policy generation may use. Never source. */
+export interface AnalysisPolicyContext {
+  analysisId: ObjectId;
+  version: string;
+  results: Pick<AnalysisResults, 'apiSurface' | 'configuration' | 'findings'>;
 }
 
 @Injectable()
@@ -91,6 +99,42 @@ export class AnalysesService implements OnModuleInit {
     );
     if (!document) throw new NotFoundException('Analysis not found');
     return document.status;
+  }
+
+  /** A finished analysis in the tenant, or null when none is usable. */
+  async findPolicyContext(
+    organizationId: ObjectId,
+    tenantId: ObjectId,
+    analysisId: ObjectId,
+    session?: ClientSession,
+  ): Promise<AnalysisPolicyContext | null> {
+    const document = await this.collection.findOne(
+      {
+        _id: analysisId,
+        organizationId,
+        tenantId,
+        status: { $in: ['completed', 'partial'] },
+      },
+      {
+        session,
+        projection: {
+          version: 1,
+          'results.apiSurface': 1,
+          'results.configuration': 1,
+          'results.findings': 1,
+        },
+      },
+    );
+    if (!document?.results || !document.version) return null;
+    return {
+      analysisId: document._id,
+      version: document.version,
+      results: {
+        apiSurface: document.results.apiSurface,
+        configuration: document.results.configuration,
+        findings: document.results.findings,
+      },
+    };
   }
 
   async list(

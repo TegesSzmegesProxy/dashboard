@@ -40,6 +40,9 @@ export interface BundleActivationInput {
   actorSubject: string;
 }
 
+/** Bundles are immutable, so their endpoint sets can be cached forever. */
+const ENDPOINT_CACHE_LIMIT = 1_000;
+
 export interface ProxyCompatibility {
   bundleSchemas: string[];
   toolRegistries: string[];
@@ -47,6 +50,8 @@ export interface ProxyCompatibility {
 
 @Injectable()
 export class BundlesService implements OnModuleInit {
+  private readonly endpointCache = new Map<string, ReadonlySet<string>>();
+
   constructor(
     private readonly mongo: MongoDatabase,
     private readonly audit: AuditService,
@@ -243,6 +248,38 @@ export class BundlesService implements OnModuleInit {
   ): Promise<ActiveBundleSummary | null> {
     const active = await this.findActive(organizationId, tenantId);
     return active ? this.toSummary(active.bundle, active.pointer) : null;
+  }
+
+  /**
+   * Policy endpoint keys ("METHOD /path") of a bundle issued for the tenant,
+   * or null when the tenant has no bundle with that version.
+   */
+  async findPolicyEndpoints(
+    organizationId: ObjectId,
+    tenantId: ObjectId,
+    version: string,
+  ): Promise<ReadonlySet<string> | null> {
+    const key = `${organizationId.toHexString()}:${tenantId.toHexString()}:${version}`;
+    const cached = this.endpointCache.get(key);
+    if (cached) return cached;
+    const bundle = await this.bundles.findOne(
+      { organizationId, tenantId, version },
+      { projection: { canonicalPayload: 1 } },
+    );
+    if (!bundle) return null;
+    const payload = JSON.parse(
+      bundle.canonicalPayload,
+    ) as ActiveBundleV1Payload;
+    const endpoints: ReadonlySet<string> = new Set(
+      payload.policy.endpoints.map(
+        (endpoint) => `${endpoint.method} ${endpoint.path}`,
+      ),
+    );
+    if (this.endpointCache.size >= ENDPOINT_CACHE_LIMIT) {
+      this.endpointCache.delete(this.endpointCache.keys().next().value!);
+    }
+    this.endpointCache.set(key, endpoints);
+    return endpoints;
   }
 
   private async findActive(
