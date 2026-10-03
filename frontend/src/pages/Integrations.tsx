@@ -4,7 +4,7 @@ import { Badge, Button, Dialog, Input, Select } from '../components';
 import { useOrg } from '../Layout';
 import { Loading, Note, ProposedNote, Section, useAction, when } from '../ui';
 
-// JEV is backed by the integrations module (ADR-0009); the AI model credential is still a proposed endpoint.
+// Both credentials are backed by the integrations module (JEV: ADR-0009, AI model: ADR-0010).
 // The key is write-only: it is sent once, cleared from state, and never read back or displayed.
 
 function Credential<T extends { connected: boolean }>({ title, desc, path, required, fields, status, disconnectNote }: {
@@ -77,8 +77,8 @@ export function JevIntegrationCard() {
 export function AiModelCard() {
   return (
     <Credential title="Global AI model API key" desc="Default model credentials for all projects." path="ai-model" required={['provider', 'apiKey']}
-      disconnectNote="Projects stop using this credential immediately. Features that depend on it fail until a new key is saved."
-      status={(d: AiModelIntegration) => `${d.provider ?? 'provider'} · updated ${when(d.lastUpdatedAt)}`}
+      disconnectNote="The stored key is deleted and cannot be recovered. Save a new key to reconnect."
+      status={(d: AiModelIntegration) => `${d.provider ?? 'provider'} · version ${d.version ?? '—'} · updated ${when(d.updatedAt)}`}
       fields={(set, v) => (
         <>
           <Select label="Provider" value={v.provider ?? ''} onChange={(e) => set('provider', e.target.value)}

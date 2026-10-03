@@ -618,6 +618,43 @@ paths:
         - bearer: []
       tags:
         - integrations
+  /api/v1/organizations/{organizationId}/integrations/ai-model:
+    get:
+      operationId: AiModelCredentialController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - integrations
+    put:
+      operationId: AiModelCredentialController_set
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutAiModelCredentialDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - integrations
+    delete:
+      operationId: AiModelCredentialController_remove
+      parameters: []
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - integrations
   /api/v1/proxy/jev-credential:
     get:
       operationId: ProxyJevCredentialController_get
@@ -1291,6 +1328,24 @@ components:
         - installationId
         - owner
         - name
+    PutAiModelCredentialDto:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - custom
+        apiKey:
+          type: string
+          description: >-
+            AI model provider API key. Write-only: it is encrypted at rest and
+            never returned to the dashboard.
+          writeOnly: true
+      required:
+        - provider
+        - apiKey
     PutJevCredentialDto:
       type: object
       properties:

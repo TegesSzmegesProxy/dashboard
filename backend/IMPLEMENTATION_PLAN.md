@@ -34,7 +34,7 @@ src/
     policy-compiler/       structured policy to registered toolchain
     approvals/             approve/reject workflow
     bundles/               activation, signing and distribution
-    integrations/          organization integration credentials (JEV)
+    integrations/          organization integration credentials (JEV, AI model)
     telemetry/             redacted summaries and proxy health
     audit/                 immutable administrative audit trail
     health/                liveness and readiness
@@ -71,6 +71,8 @@ trusted as authorization.
   field values, authorization headers or cookies.
 - `JevCredential`: one per organization, AES-256-GCM encrypted key, version
   and update metadata. The key is never returned to the dashboard.
+- `AiModelCredential`: one per organization, provider plus AES-256-GCM
+  encrypted key, version and update metadata. Write-only like `JevCredential`.
 - `AuditEntry`: actor, action, target, timestamp and safe metadata.
 
 ## 4. Persistence and infrastructure
@@ -284,6 +286,11 @@ only after an explicit project decision changes this policy.
    ADR-0005.
 7. Collector upload contents, file allowlist, retention and storage are
    defined by ADR-0006. Data residency for AI processing is not yet decided.
+8. The organization AI model credential is stored per ADR-0010 but not yet
+   consumed. Open: whether it replaces or falls back to the platform
+   `ANTHROPIC_API_KEY` for analyses and policy generation, and how
+   `openai` and `custom` providers (including a custom endpoint URL) are
+   supported.
 
 These decisions must be recorded as ADRs before the dependent module is
 implemented.

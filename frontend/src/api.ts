@@ -331,6 +331,9 @@ export interface PolicyGeneration {
 /** Organization JEV credential (ADR-0009). The key itself is write-only. */
 export interface JevIntegration { connected: boolean; version: number | null; updatedAt: string | null }
 
+/** Organization default AI model credential (ADR-0010). The key itself is write-only. */
+export interface AiModelIntegration { connected: boolean; provider: 'openai' | 'anthropic' | 'custom' | null; version: number | null; updatedAt: string | null }
+
 /** Customer-visible manifest of one collector upload. */
 export interface AnalysisUpload {
   id: string;
@@ -350,7 +353,6 @@ export interface AnalysisUpload {
 // ---------- PROPOSED contracts: in the mockups, NOT in the backend yet ----------
 // Every path below is a suggestion for the backend. See "Proposed endpoints" in CLAUDE.md.
 
-export interface AiModelIntegration { connected: boolean; provider: 'openai' | 'anthropic' | 'custom' | null; lastUpdatedAt: string | null }
 export interface ModelSettings { contextLength: number; temperature: number; topP: number; maxTokens: number }
 export type PolicyAction = 'allow' | 'review' | 'block';
 export interface PolicyDefaults { defaultAction: PolicyAction; customConstraints: string; threshold: number }

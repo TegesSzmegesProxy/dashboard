@@ -76,6 +76,15 @@ Proxies fetch it from `GET /api/v1/proxy/jev-credential` with a deployment
 key that has the opt-in `jev-credentials:read` scope; `404` means no
 credential is configured. See ADR-0009.
 
+### AI model credential
+
+Owners and admins set the organization's default AI model key with
+`PUT /api/v1/organizations/:organizationId/integrations/ai-model`
+(`provider`: `openai` | `anthropic` | `custom`, `apiKey`), read its status
+with `GET` and disconnect it with `DELETE`. It is stored like the JEV
+credential and never returned. Analyses and policy generation do not use it
+yet. See ADR-0010.
+
 ### Application analysis
 
 Collectors send `POST /api/v1/tenants/:tenantId/analysis-uploads` with a

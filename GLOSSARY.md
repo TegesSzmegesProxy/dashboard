@@ -64,6 +64,9 @@
 - **JEV credential**: the organization's write-only JEV API key, stored
   encrypted and pulled by proxies with the `jev-credentials:read` deployment
   scope. It is never part of a bundle.
+- **AI model credential**: the organization's write-only default AI provider
+  and API key, stored encrypted in the control plane. It is never sent to
+  proxies or included in a bundle.
 - **Telemetry**: best-effort redacted proxy health and aggregate decision data.
   It excludes raw request bodies, field values, authorization headers, and
   cookies.

@@ -107,9 +107,10 @@ keep the previous key when a fetch fails (ADR-0009).
   exclusions, redaction counts) and the derived analysis (ADR-0006).
 - Signing keys, the GitHub App private key and provider credentials come from
   deployment secrets or a secret manager, never the database or frontend.
-- Customer integration credentials (the organization JEV key) are the one
-  exception: MongoDB stores them encrypted under `CREDENTIAL_ENCRYPTION_KEY`,
-  and they are write-only for the dashboard (ADR-0009).
+- Customer integration credentials (the organization JEV key and AI model
+  key) are the one exception: MongoDB stores them encrypted under
+  `CREDENTIAL_ENCRYPTION_KEY`, and they are write-only for the dashboard
+  (ADR-0009, ADR-0010).
 - Telemetry is best-effort and redacted. It must not affect bundle distribution
   or runtime decisions.
 
