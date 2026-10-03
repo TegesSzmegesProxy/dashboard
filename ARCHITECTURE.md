@@ -91,6 +91,11 @@ Proxies send batched, redacted `tessera.telemetry/v1` counters to
 policy endpoint keys of the loaded bundle. Telemetry intake and operational
 alerts are separate from distribution and never change it.
 
+The organization's JEV credential is not part of a bundle. Proxies pull it
+from `GET /api/v1/proxy/jev-credential` (`tessera.jev-credential/v1`) with a
+deployment key that holds `jev-credentials:read`, keep it in memory only, and
+keep the previous key when a fetch fails (ADR-0009).
+
 ## Data and infrastructure
 
 - MongoDB is authoritative for organization- and tenant-owned state.
@@ -102,6 +107,9 @@ alerts are separate from distribution and never change it.
   exclusions, redaction counts) and the derived analysis (ADR-0006).
 - Signing keys, the GitHub App private key and provider credentials come from
   deployment secrets or a secret manager, never the database or frontend.
+- Customer integration credentials (the organization JEV key) are the one
+  exception: MongoDB stores them encrypted under `CREDENTIAL_ENCRYPTION_KEY`,
+  and they are write-only for the dashboard (ADR-0009).
 - Telemetry is best-effort and redacted. It must not affect bundle distribution
   or runtime decisions.
 

@@ -12,6 +12,7 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { BundlesModule } from './modules/bundles/bundles.module.js';
 import { EventsModule } from './modules/events/events.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { IntegrationsModule } from './modules/integrations/integrations.module.js';
 import { OrganizationsModule } from './modules/organizations/organizations.module.js';
 import { PoliciesModule } from './modules/policies/policies.module.js';
 import { PolicyCompilerModule } from './modules/policy-compiler/policy-compiler.module.js';
@@ -43,6 +44,7 @@ import { TelemetryModule } from './modules/telemetry/telemetry.module.js';
     BundlesModule,
     TelemetryModule,
     SourceRepositoriesModule,
+    IntegrationsModule,
     AnalysesModule,
     AnalysisUploadsModule,
     PolicyGenerationModule,

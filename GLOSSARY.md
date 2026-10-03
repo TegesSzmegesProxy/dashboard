@@ -61,6 +61,9 @@
   activation.
 - **JEV**: an external classification model used by the proxy for selected
   runtime decisions. It is not the model used to generate or edit policies.
+- **JEV credential**: the organization's write-only JEV API key, stored
+  encrypted and pulled by proxies with the `jev-credentials:read` deployment
+  scope. It is never part of a bundle.
 - **Telemetry**: best-effort redacted proxy health and aggregate decision data.
   It excludes raw request bodies, field values, authorization headers, and
   cookies.
