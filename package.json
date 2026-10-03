@@ -1,0 +1,19 @@
+{
+  "name": "dashboard",
+  "version": "1.0.0",
+  "description": "A repository for dashboard frontend and dashboard backend.",
+  "main": "index.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TegesSzmegesProxy/dashboard.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/TegesSzmegesProxy/dashboard/issues"
+  },
+  "homepage": "https://github.com/TegesSzmegesProxy/dashboard#readme"
+}
