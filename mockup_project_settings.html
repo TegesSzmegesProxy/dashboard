@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tessera · Project Settings</title>
+<style>
+  /* ---------- Design tokens (identical to index.html) ---------- */
+  :root {
+    --bg: #f5f5f6; --surface: #fff; --border: #e1e2e5; --border-strong: #c9cbd0;
+    --text: #1d1f23; --muted: #6b6f78; --accent: #2f3640; --accent-text: #fff;
+    --radius: 6px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg); }
+
+  /* ---------- Layout: sidebar + main ---------- */
+  .app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 24px 16px; }
+  .brand { font-size: 18px; font-weight: 700; padding: 0 8px 24px; }
+  .nav { list-style: none; margin: 0; padding: 0; }
+  .nav a { display: block; padding: 8px 12px; margin-bottom: 2px; border-radius: var(--radius); color: var(--muted); text-decoration: none; }
+  .nav a.active { background: var(--bg); color: var(--text); font-weight: 600; }
+  .main { padding: 32px 40px; max-width: 980px; }
+  .page-header { margin-bottom: 24px; }
+  .breadcrumb { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .page-header h1 { margin: 0 0 4px; font-size: 24px; }
+  .page-header p { margin: 0; color: var(--muted); }
+
+  /* ---------- Cards ---------- */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px; }
+  .card > h2 { margin: 0 0 4px; font-size: 16px; }
+  .card > .desc { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+  .subsection { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 16px; }
+  .subsection h3 { margin: 0 0 10px; font-size: 14px; }
+
+  /* ---------- Form controls ---------- */
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%; padding: 8px 10px; font: inherit; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  }
+  textarea { resize: vertical; min-height: 56px; }
+  input[type="range"] { width: 100%; }
+  .btn { font: inherit; font-weight: 600; padding: 8px 16px; border-radius: var(--radius); border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text); white-space: nowrap; }
+  .btn.secondary { background: var(--surface); color: var(--text); border-color: var(--border-strong); }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .row { display: flex; gap: 12px; align-items: flex-end; }
+  .row > .grow { flex: 1; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--muted); font-weight: 400; }
+  .range-head { display: flex; justify-content: space-between; }
+  .range-head output { font-weight: 600; color: var(--text); }
+
+  /* ---------- Endpoint cards ---------- */
+  .endpoint { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; }
+  .endpoint > header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg); border-bottom: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; }
+  .endpoint code { font-size: 13px; }
+  .endpoint .body { padding: 14px; }
+  .method { font-size: 11px; font-weight: 700; padding: 2px 6px; border: 1px solid var(--border-strong); border-radius: 4px; margin-right: 8px; background: var(--surface); }
+
+  /* ---------- Field policy table ---------- */
+  .table-wrap { overflow-x: auto; margin-top: 14px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; vertical-align: top; border-bottom: 1px solid var(--border); }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; background: var(--bg); }
+  td code { background: var(--bg); padding: 2px 6px; border-radius: 4px; }
+  td select { min-width: 140px; }
+  td textarea { min-width: 200px; min-height: 40px; }
+  .footer-bar { display: flex; justify-content: flex-end; gap: 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== Sidebar navigation ===== -->
+  <aside class="sidebar">
+    <div class="brand">Tessera</div>
+    <nav aria-label="Primary">
+      <ul class="nav">
+        <li><a href="#">Dashboard</a></li>
+        <li><a href="#" class="active" aria-current="page">Projects</a></li>
+        <li><a href="#">Settings</a></li>
+        <li><a href="#">API Keys</a></li>
+        <li><a href="#">Policies</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="page-header">
+      <div class="breadcrumb">Projects / Checkout Service</div>
+      <h1>Project Settings</h1>
+      <p>Configuration for <strong>Checkout Service</strong>.</p>
+    </header>
+
+    <!-- ===== Repository configuration ===== -->
+    <section class="card" aria-labelledby="repo-h">
+      <h2 id="repo-h">Repository Configuration</h2>
+      <p class="desc">Link the GitHub repository for this project.</p>
+      <div class="row">
+        <div class="grow">
+          <label for="repo">GitHub repository URL or slug</label>
+          <input type="text" id="repo" placeholder="https://github.com/org/repo or org/repo">
+        </div>
+        <button class="btn">Save</button>
+      </div>
+    </section>
+
+    <!-- ===== Context window ===== -->
+    <section class="card" aria-labelledby="context-h">
+      <h2 id="context-h">Context Window</h2>
+      <p class="desc">How much request history is included as context.</p>
+      <div class="range-head">
+        <label for="context-len">Context length (last <em>x</em> requests)</label>
+        <output>20</output>
+      </div>
+      <input type="range" id="context-len" min="1" max="100" value="20">
+    </section>
+
+    <!-- ===== Model sampling ===== -->
+    <section class="card" aria-labelledby="sampling-h">
+      <h2 id="sampling-h">Model Sampling</h2>
+      <p class="desc">Controls how model output is generated.</p>
+      <div class="grid-3">
+        <div>
+          <label for="temp">Temperature</label>
+          <input type="number" id="temp" min="0" max="2" step="0.1" value="0.7">
+          <p class="hint">0 – 2</p>
+        </div>
+        <div>
+          <label for="top-p">Top-P</label>
+          <input type="number" id="top-p" min="0" max="1" step="0.05" value="0.95">
+          <p class="hint">0 – 1</p>
+        </div>
+        <div>
+          <label for="max-tokens">Max tokens</label>
+          <input type="number" id="max-tokens" min="1" value="1024">
+          <p class="hint">Per response</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Global policies & thresholds ===== -->
+    <section class="card" aria-labelledby="global-pol-h">
+      <h2 id="global-pol-h">Global Policies &amp; Thresholds</h2>
+      <p class="desc">Defaults applied to every endpoint unless overridden below.</p>
+      <div class="grid-2">
+        <div>
+          <label for="global-policy">Default policy</label>
+          <select id="global-policy">
+            <option>Allow</option>
+            <option>Flag for review</option>
+            <option>Block</option>
+          </select>
+          <div style="margin-top:12px;">
+            <label for="global-constraints">Custom constraints</label>
+            <textarea id="global-constraints" placeholder="e.g. Never expose payment card numbers."></textarea>
+          </div>
+        </div>
+        <div>
+          <div class="range-head">
+            <label for="global-threshold">Global threshold</label>
+            <output>0.60</output>
+          </div>
+          <input type="range" id="global-threshold" min="0" max="1" step="0.01" value="0.6">
+          <p class="hint">Score at which a policy is triggered.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Endpoint-specific management ===== -->
+    <section class="card" aria-labelledby="endpoints-h">
+      <h2 id="endpoints-h">Endpoint-Specific Management</h2>
+      <p class="desc">Override policies and thresholds per endpoint, per request and per field.</p>
+
+      <!-- Endpoint 1 -->
+      <article class="endpoint">
+        <header>
+          <span><span class="method">POST</span><code>/v1/checkout</code></span>
+          <span class="badge">Overrides active</span>
+        </header>
+        <div class="body">
+          <div class="grid-2">
+            <div>
+              <label for="ep1-policy">Request-level policy</label>
+              <select id="ep1-policy"><option>Flag for review</option><option>Allow</option><option>Block</option></select>
+            </div>
+            <div>
+              <div class="range-head"><label for="ep1-threshold">Endpoint threshold</label><output>0.75</output></div>
+              <input type="range" id="ep1-threshold" min="0" max="1" step="0.01" value="0.75">
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Field</th><th>Policy rule</th><th>Custom constraints</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><code>card_number</code></td>
+                  <td><select aria-label="Policy for card_number"><option>Mask</option><option>Allow</option><option>Block</option></select></td>
+                  <td><textarea aria-label="Constraints for card_number">Show last 4 digits only.</textarea></td>
+                </tr>
+                <tr>
+                  <td><code>amount</code></td>
+                  <td><select aria-label="Policy for amount"><option>Require</option><option>Allow</option><option>Flag for review</option></select></td>
+                  <td><textarea aria-label="Constraints for amount" placeholder="Optional constraints"></textarea></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </article>
+
+      <!-- Endpoint 2 -->
+      <article class="endpoint">
+        <header>
+          <span><span class="method">GET</span><code>/v1/orders/{id}</code></span>
+          <span class="badge">Uses global</span>
+        </header>
+        <div class="body">
+          <div class="grid-2">
+            <div>
+              <label for="ep2-policy">Request-level policy</label>
+              <select id="ep2-policy"><option>Allow</option><option>Flag for review</option><option>Block</option></select>
+            </div>
+            <div>
+              <div class="range-head"><label for="ep2-threshold">Endpoint threshold</label><output>0.60</output></div>
+              <input type="range" id="ep2-threshold" min="0" max="1" step="0.01" value="0.6">
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Field</th><th>Policy rule</th><th>Custom constraints</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><code>order_id</code></td>
+                  <td><select aria-label="Policy for order_id"><option>Require</option><option>Allow</option><option>Block</option></select></td>
+                  <td><textarea aria-label="Constraints for order_id" placeholder="Optional constraints"></textarea></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </article>
+
+      <button class="btn secondary small">+ Add Endpoint</button>
+    </section>
+
+    <!-- ===== Page-level actions ===== -->
+    <div class="footer-bar">
+      <button class="btn secondary">Cancel</button>
+      <button class="btn">Save All Changes</button>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tessera · Dashboard</title>
+<style>
+  /* ---------- Design tokens (shared across both pages) ---------- */
+  :root {
+    --bg: #f5f5f6; --surface: #fff; --border: #e1e2e5; --border-strong: #c9cbd0;
+    --text: #1d1f23; --muted: #6b6f78; --accent: #2f3640; --accent-text: #fff;
+    --radius: 6px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg); }
+
+  /* ---------- Layout: sidebar + main ---------- */
+  .app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 24px 16px; }
+  .brand { font-size: 18px; font-weight: 700; padding: 0 8px 24px; }
+  .nav { list-style: none; margin: 0; padding: 0; }
+  .nav a { display: block; padding: 8px 12px; margin-bottom: 2px; border-radius: var(--radius); color: var(--muted); text-decoration: none; }
+  .nav a.active { background: var(--bg); color: var(--text); font-weight: 600; }
+  .main { padding: 32px 40px; max-width: 980px; }
+  .page-header { margin-bottom: 24px; }
+  .page-header h1 { margin: 0 0 4px; font-size: 24px; }
+  .page-header p { margin: 0; color: var(--muted); }
+
+  /* ---------- Cards ---------- */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px; }
+  .card > h2 { margin: 0 0 4px; font-size: 16px; }
+  .card > .desc { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+  .subsection { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 16px; }
+  .subsection h3 { margin: 0 0 10px; font-size: 14px; }
+
+  /* ---------- Form controls ---------- */
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  input[type="text"], input[type="password"], select {
+    width: 100%; padding: 8px 10px; font: inherit; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  }
+  .btn { font: inherit; font-weight: 600; padding: 8px 16px; border-radius: var(--radius); border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text); white-space: nowrap; }
+  .btn.secondary { background: var(--surface); color: var(--text); border-color: var(--border-strong); }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .row { display: flex; gap: 12px; align-items: flex-end; }
+  .row > .grow { flex: 1; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--muted); font-weight: 400; }
+
+  /* ---------- Project list ---------- */
+  .list { list-style: none; margin: 0 0 16px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); }
+  .list li { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; }
+  .list li + li { border-top: 1px solid var(--border); }
+  .meta { color: var(--muted); font-size: 12px; margin-left: 8px; }
+  .actions { display: flex; gap: 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== Sidebar navigation ===== -->
+  <aside class="sidebar">
+    <div class="brand">Tessera</div>
+    <nav aria-label="Primary">
+      <ul class="nav">
+        <li><a href="#" class="active" aria-current="page">Dashboard</a></li>
+        <li><a href="#">Projects</a></li>
+        <li><a href="#">Settings</a></li>
+        <li><a href="#">API Keys</a></li>
+        <li><a href="#">Policies</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="page-header">
+      <h1>Dashboard</h1>
+      <p>Manage your projects and global integrations.</p>
+    </header>
+
+    <!-- ===== Project management ===== -->
+    <section class="card" aria-labelledby="projects-h">
+      <h2 id="projects-h">Projects</h2>
+      <p class="desc">Select a project to open its settings, or add a new one.</p>
+
+      <ul class="list">
+        <li>
+          <span><strong>Checkout Service</strong><span class="meta">3 endpoints · Created Mar 12</span></span>
+          <span class="actions"><a href="project-settings.html"><button class="btn secondary small">Open settings</button></a><button class="btn secondary small">Remove</button></span>
+        </li>
+        <li>
+          <span><strong>Support Assistant</strong><span class="meta">5 endpoints · Created Apr 02</span></span>
+          <span class="actions"><button class="btn secondary small">Open settings</button><button class="btn secondary small">Remove</button></span>
+        </li>
+        <li>
+          <span><strong>Internal Search</strong><span class="meta">2 endpoints · Created May 21</span></span>
+          <span class="actions"><button class="btn secondary small">Open settings</button><button class="btn secondary small">Remove</button></span>
+        </li>
+      </ul>
+
+      <!-- Add new project form -->
+      <div class="row">
+        <div class="grow">
+          <label for="new-project">New project name</label>
+          <input type="text" id="new-project" placeholder="e.g. Billing Agent">
+        </div>
+        <button class="btn">Add New Project</button>
+      </div>
+    </section>
+
+    <!-- ===== Global settings ===== -->
+    <section class="card" aria-labelledby="global-h">
+      <h2 id="global-h">Global Settings</h2>
+      <p class="desc">Credentials shared across all projects. Keys are masked after saving.</p>
+
+      <!-- JEV API key -->
+      <h3 style="margin:0 0 10px;font-size:14px;">JEV API Key <span class="badge">Connected</span></h3>
+      <div class="row">
+        <div class="grow">
+          <label for="jev-key">API key</label>
+          <input type="password" id="jev-key" value="••••••••••••••••">
+        </div>
+        <button class="btn">Update</button>
+      </div>
+
+      <!-- AI model API key -->
+      <div class="subsection">
+        <h3>AI Model API Key <span class="badge">Not connected</span></h3>
+        <div class="grid-2" style="margin-bottom:12px;">
+          <div>
+            <label for="provider">Provider</label>
+            <select id="provider">
+              <option>OpenAI</option>
+              <option>Anthropic</option>
+              <option>Custom</option>
+            </select>
+          </div>
+          <div>
+            <label for="endpoint">Custom endpoint (if Custom)</label>
+            <input type="text" id="endpoint" placeholder="https://api.example.com/v1">
+          </div>
+        </div>
+        <div class="row">
+          <div class="grow">
+            <label for="model-key">API key</label>
+            <input type="password" id="model-key" placeholder="Paste your key">
+          </div>
+          <button class="btn">Save</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
