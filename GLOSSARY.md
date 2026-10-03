@@ -22,6 +22,9 @@
   and compilation state. Editing creates a new version.
 - **Compiled policy**: a policy translated into registered proxy tool IDs and
   validated tool configuration. It is not executable application code.
+- **Tool registry**: a versioned allowlist of proxy tool IDs, context types,
+  and configuration contracts that the control plane may compile. An unknown
+  tool is a compilation failure, never executable input.
 - **Active bundle**: the signed, immutable unit distributed to a proxy. It
   combines one tenant's runtime configuration and compiled policy under one
   version.
@@ -44,4 +47,3 @@
   cookies.
 - **Failure behavior**: explicit tenant configuration for a security-relevant
   failure. Do not silently substitute a fail-open or fail-closed default.
-

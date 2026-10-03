@@ -31,6 +31,7 @@ async function bootstrap(): Promise<void> {
       .setTitle('Tessera Control Plane API')
       .setDescription('Hosted control-plane API for Tessera')
       .setVersion('1.0')
+      .addBearerAuth()
       .build();
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup(`${apiPrefix}/docs`, app, document);

@@ -135,6 +135,10 @@ leakage.
 Exit criteria: collector and proxy credentials cannot use each other's API or
 access an unassigned tenant.
 
+Decision: machine credentials use opaque 256-bit secrets, keyed hashes and
+type-specific guards; Redis rate-limit failure behavior is explicit per
+deployment. See ADR-0003.
+
 ### Phase 3 — policy import, compile and lifecycle MVP
 
 - Import a structured policy through the dashboard API.
@@ -146,6 +150,11 @@ access an unassigned tenant.
 
 Exit criteria: a valid imported policy can reach `ACTIVE`; invalid input leaves
 the previous active policy unchanged.
+
+Decision: structured policy uses `tessera.policy/v1` and the initial closed
+tool registry `tessera.tools/v1`. Policy content is SHA-256 addressed, lifecycle
+transitions emit durable outbox events, and activation updates a tenant-scoped
+selection without distributing a bundle. See ADR-0004.
 
 ### Phase 4 — signed bundle distribution
 
@@ -210,13 +219,18 @@ only after an explicit project decision changes this policy.
 
 ## 8. Decisions required before Phase 1
 
-1. Dashboard identity provider and roles beyond owner/admin/viewer.
+1. Dashboard identity uses Auth0 access tokens; authorization roles remain
+   `owner`, `admin`, and `viewer` memberships stored by Tessera. See ADR-0001.
 2. Whether JEV credentials are customer-managed per proxy or platform-managed.
 3. Exact JEV API contract.
-4. Failure behavior when a proxy has neither a valid remote bundle nor a last
-   known good bundle.
-5. Unknown-endpoint behavior and its configuration key.
-6. Supported bundle schema and tool-registry compatibility policy.
+4. Runtime configuration requires an explicit `failureBehavior` value when a
+   proxy has neither a valid remote bundle nor a last known good bundle. See
+   ADR-0002; the wire-level behavior remains a Phase 4 contract decision.
+5. Runtime configuration uses the required key `unknownEndpointBehavior`. See
+   ADR-0002.
+6. Tool-registry compatibility for Phase 3 is defined by ADR-0004. Supported
+   bundle schemas and delayed proxy upgrade compatibility remain a required
+   Phase 4 decision.
 7. Collector upload size, file allowlist, retention and data residency.
 
 These decisions must be recorded as ADRs before the dependent module is

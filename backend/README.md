@@ -12,6 +12,23 @@ npm install
 npm run start:dev
 ```
 
+The dashboard API accepts Auth0-issued bearer access tokens. Configure the
+issuer, API audience and MongoDB connection using `.env.example`. MongoDB must
+run as a replica set because administrative mutations and their audit entries
+are committed in one transaction.
+
+Collector and deployment credentials are opaque machine keys whose plaintext
+is returned only at creation or rotation. Configure Redis for distributed rate
+limits and provide a stable `API_KEY_HASH_SECRET`; changing that secret
+invalidates existing keys. The Redis failure posture is intentionally required
+and has no default. Generate the HMAC secret independently for each deployment,
+for example with a cryptographically secure secret manager.
+
+Policy imports use the versioned `tessera.policy/v1` contract. Imported content
+is immutable and content-addressed; compilation, approval or rejection, and
+activation are separate audited transitions. Activation selects a policy for a
+tenant but does not distribute a signed bundle until Phase 4.
+
 The API is available at `http://localhost:5000/api/v1`. Swagger is available
 at `http://localhost:5000/api/v1/docs` when `SWAGGER_ENABLED=true`.
 
