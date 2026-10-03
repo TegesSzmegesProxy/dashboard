@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useApi, usePaged, type PolicyVersion, type StructuredPolicy } from '../api';
 import { Button, Dialog, Input } from '../components';
 import { useOrg } from '../Layout';
+import { EditPolicyDialog, Generations } from './ProjectGenerations';
 import { LoadMore, Loading, newIdempotencyKey, Note, PolicyBadge, Section, useAction, when } from '../ui';
 
 export function ProjectPolicies({ path }: { path: string }) {
@@ -9,9 +10,12 @@ export function ProjectPolicies({ path }: { path: string }) {
   const policies = usePaged<PolicyVersion>(`${path}/policies`);
   const [selected, setSelected] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [genKey, setGenKey] = useState(0);
   const current = policies.items.find((p) => p.version === selected) ?? policies.items[0];
 
   return (
+    <div className="stack" style={{ gap: 'var(--space-5)' }}>
     <div className="grid-main" style={{ gridTemplateColumns: '1fr 1.6fr' }}>
       <Section title="Versions" desc="Each version is immutable. Editing means importing a new one."
         aside={canEdit ? <Button size="sm" iconLeft="plus" onClick={() => setImporting(true)}>Import</Button> : undefined}>
@@ -35,13 +39,16 @@ export function ProjectPolicies({ path }: { path: string }) {
         <LoadMore hasMore={policies.hasMore} loadMore={policies.loadMore} />
       </Section>
 
-      {current ? <PolicyDetail key={current.id} p={current} path={path} reload={policies.reload} /> : <span />}
+      {current ? <PolicyDetail key={current.id} p={current} path={path} reload={policies.reload} onEdit={() => setEditing(current.version)} /> : <span />}
       {importing && <ImportDialog path={path} onClose={() => setImporting(false)} onDone={(v) => { setImporting(false); setSelected(v); policies.reload(); }} />}
+      {editing && <EditPolicyDialog path={path} version={editing} onClose={() => setEditing(null)} onDone={() => { setEditing(null); setGenKey((k) => k + 1); }} />}
+    </div>
+    <Generations key={genKey} path={path} onOpenVersion={(v) => { setSelected(v); policies.reload(); }} />
     </div>
   );
 }
 
-function PolicyDetail({ p, path, reload }: { p: PolicyVersion; path: string; reload: () => void }) {
+function PolicyDetail({ p, path, reload, onEdit }: { p: PolicyVersion; path: string; reload: () => void; onEdit: () => void }) {
   const { canEdit } = useOrg();
   const api = useApi();
   const run = useAction();
@@ -91,6 +98,11 @@ function PolicyDetail({ p, path, reload }: { p: PolicyVersion; path: string; rel
           ))}
         </div>
 
+        {canEdit && p.compilationStatus === 'compiled' && (
+          <div className="actions" style={{ justifyContent: 'flex-end' }}>
+            <Button variant="outline" size="sm" iconLeft="zap" onClick={onEdit}>Edit with instruction</Button>
+          </div>
+        )}
         {canEdit && p.state === 'PENDING_APPROVAL' && (
           <div className="actions" style={{ justifyContent: 'flex-end' }}>
             <Button variant="outline" onClick={() => setDialog('reject')}>Reject</Button>

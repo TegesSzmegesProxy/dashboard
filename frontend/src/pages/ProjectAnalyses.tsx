@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { usePaged, useResource, type Analysis, type AnalysisSummary, type Severity } from '../api';
-import { Badge, Dialog } from '../components';
+import { usePaged, useResource, type Analysis, type AnalysisUpload, type AnalysisSummary, type Severity } from '../api';
+import { Badge, Button, Dialog } from '../components';
+import { useOrg } from '../Layout';
+import { GenerateDialog } from './ProjectGenerations';
 import { AnalysisBadge, LoadMore, Loading, Note, Section, short, when } from '../ui';
 
 const SEV: Record<Severity, 'blocked' | 'review' | 'neutral'> = {
@@ -35,13 +37,32 @@ export function ProjectAnalyses({ path }: { path: string }) {
         </div>
       )}
       <LoadMore hasMore={analyses.hasMore} loadMore={analyses.loadMore} />
-      {open && <AnalysisDialog path={`${path}/analyses/${open}`} onClose={() => setOpen(null)} />}
+      {open && <AnalysisDialog path={`${path}/analyses/${open}`} projectPath={path} onClose={() => setOpen(null)} />}
     </Section>
   );
 }
 
-function AnalysisDialog({ path, onClose }: { path: string; onClose: () => void }) {
+function UploadManifest({ projectPath, uploadId }: { projectPath: string; uploadId: string }) {
+  const { data: u, error } = useResource<AnalysisUpload>(`${projectPath}/analysis-uploads/${uploadId}`);
+  if (error) return <Note tone="error">{error}</Note>;
+  if (!u) return <Loading what="upload manifest" />;
+  return (
+    <div>
+      <div className="eyebrow">Collector upload</div>
+      <p className="mono small" style={{ margin: 'var(--space-2) 0' }}>
+        {u.collector.name} {u.collector.version} · received {when(u.receivedAt)} · {u.environmentSummary.dependencyCount} dependencies · {u.environmentSummary.vulnerabilityCount} vulnerabilities
+      </p>
+      <p className="mono faint small" style={{ margin: 0 }}>
+        redacted by {u.redaction.tool} ({u.redaction.rules.join(', ') || 'no rules'}) · {u.redaction.redactedValueCount} values · tools: {u.environmentSummary.tools.map((t) => `${t.name} ${t.version} ${t.status}`).join(', ') || 'none'}
+      </p>
+    </div>
+  );
+}
+
+function AnalysisDialog({ path, projectPath, onClose }: { path: string; projectPath: string; onClose: () => void }) {
+  const { canEdit } = useOrg();
   const { data: a, error } = useResource<Analysis>(path);
+  const [generating, setGenerating] = useState(false);
   return (
     <Dialog open width={880} title={a ? `Analysis ${short(a.commitSha)}` : 'Analysis'} onClose={onClose}
       description={a ? `${a.repository?.fullName ?? ''} · ${a.provenance.aiModel ?? 'no AI model'} · ${when(a.createdAt)}` : undefined}>
@@ -50,10 +71,16 @@ function AnalysisDialog({ path, onClose }: { path: string; onClose: () => void }
         {!a && !error && <Loading what="analysis" />}
         {a && (
           <>
-            <div className="actions">
-              <AnalysisBadge status={a.status} />
-              {a.errorCode && <Badge status="blocked" dot={false}>{a.errorCode}</Badge>}
+            <div className="spread">
+              <span className="actions">
+                <AnalysisBadge status={a.status} />
+                {a.errorCode && <Badge status="blocked" dot={false}>{a.errorCode}</Badge>}
+              </span>
+              {canEdit && (a.status === 'completed' || a.status === 'partial') && (
+                <Button size="sm" iconLeft="zap" onClick={() => setGenerating(true)}>Generate policy</Button>
+              )}
             </div>
+            <UploadManifest projectPath={projectPath} uploadId={a.uploadId} />
 
             <div>
               <div className="eyebrow">Steps</div>
@@ -137,6 +164,7 @@ function AnalysisDialog({ path, onClose }: { path: string; onClose: () => void }
           </>
         )}
       </div>
+      {generating && <GenerateDialog path={projectPath} analysisId={a?.id} onClose={() => setGenerating(false)} onDone={() => { setGenerating(false); onClose(); }} />}
     </Dialog>
   );
 }

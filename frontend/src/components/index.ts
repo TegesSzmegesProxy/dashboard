@@ -21,3 +21,5 @@ export { StatTile } from './data/StatTile.jsx';
 export { Terminal } from './data/Terminal.jsx';
 export { Ticket } from './data/Ticket.jsx';
 export type { IconName } from './core/Icon';
+export { Sparkline } from './data/Sparkline.jsx';
+export { ScoreMeter } from './data/ScoreMeter.jsx';

@@ -223,6 +223,143 @@ export interface Analysis extends AnalysisSummary {
   provenance: { aiProvider: string | null; aiModel: string | null };
 }
 
+// ---------- Operations, telemetry, alerts (backend: modules/telemetry) ----------
+
+export interface TelemetryTotals {
+  requests: number;
+  decisions: { allow: number; block: number };
+  staticVerdicts: { safe: number; suspicious: number; policyViolation: number; error: number };
+  jev: { sampledSafe: number; attack: number; benign: number; unavailable: number };
+  failureBehaviorApplied: number;
+  attackRate: number | null;
+  observedSamplingRate: number | null;
+  reportedSamplingRate: number | null;
+  attackRateEwma: number | null;
+}
+export interface TelemetryEvents {
+  bundleVerificationFailures: number;
+  bundlePullFailures: number;
+  droppedWindows: number;
+}
+export type TelemetryGranularity = 'minute' | 'hour';
+export interface TelemetrySummary {
+  tenantId: string;
+  granularity: TelemetryGranularity;
+  from: string;
+  to: string;
+  totals: TelemetryTotals;
+  events: TelemetryEvents;
+  series: (TelemetryTotals & { windowStart: string; events: TelemetryEvents })[];
+  endpoints: (TelemetryTotals & { endpoint: string | null })[];
+}
+
+export type AlertSeverity = 'info' | 'warning' | 'critical';
+export type AlertType =
+  | 'proxy_stale' | 'proxy_degraded' | 'proxy_incompatible'
+  | 'bundle_verification_failures' | 'jev_unavailable'
+  | 'telemetry_quota_exceeded' | 'attack_rate_high';
+export interface OperationalAlert {
+  id: string;
+  type: AlertType;
+  subject: string | null;
+  severity: AlertSeverity;
+  status: 'open' | 'resolved';
+  details: Record<string, string | number>;
+  openedAt: string;
+  lastObservedAt: string;
+  resolvedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+}
+export interface AlertSettings {
+  tenantId: string;
+  attackRateThreshold: number | null;
+  attackRateMinClassified: number | null;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+export interface OperationsOverview {
+  tenantId: string;
+  activeBundle: { version: string } | null;
+  proxies: {
+    total: number; upToDate: number; restartRequired: number; incompatible: number;
+    stale: number; degraded: number; runningLastKnownGood: number; withoutBundle: number;
+  };
+  lastTelemetryAt: string | null;
+  lastHour: TelemetryTotals;
+  openAlerts: Record<AlertSeverity, number>;
+}
+
+// ---------- AI policy generation (backend: modules/policy-generation) ----------
+
+export interface PolicyDiff {
+  addedEndpoints: string[];
+  removedEndpoints: string[];
+  changedEndpoints: {
+    endpoint: string;
+    addedTargets: string[];
+    removedTargets: string[];
+    changedTargets: { target: string; before: { minLength?: number; maxLength?: number }; after: { minLength?: number; maxLength?: number } }[];
+  }[];
+  humanReadableIntentChanged: boolean;
+}
+export interface PolicyGeneration {
+  id: string;
+  kind: 'generate' | 'edit';
+  trigger: 'analysis_completed' | 'dashboard';
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  analysisId: string | null;
+  analysisVersion: string | null;
+  baseVersion: string | null;
+  instruction: string | null;
+  requestedBy: string;
+  policyVersion: string | null;
+  reusedExistingVersion: boolean;
+  limitations: string[];
+  diff: PolicyDiff | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  validationIssues: string[];
+  provenance: { aiProvider: string | null; aiModel: string | null };
+  precisionWarning: string;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+/** Customer-visible manifest of one collector upload. */
+export interface AnalysisUpload {
+  id: string;
+  analysisId: string;
+  analysisStatus: AnalysisStatus;
+  commitSha: string;
+  collector: { name: string; version: string };
+  redaction: { tool: string; rules: string[]; redactedValueCount: number };
+  environmentSummary: {
+    tools: { name: string; version: string; status: 'succeeded' | 'failed' }[];
+    dependencyCount: number;
+    vulnerabilityCount: number;
+  };
+  receivedAt: string;
+}
+
+// ---------- PROPOSED contracts: in the mockups, NOT in the backend yet ----------
+// Every path below is a suggestion for the backend. See "Proposed endpoints" in CLAUDE.md.
+
+export interface JevIntegration { connected: boolean; lastCheckedAt: string | null }
+export interface AiModelIntegration { connected: boolean; provider: 'openai' | 'anthropic' | 'custom' | null; lastUpdatedAt: string | null }
+export interface ModelSettings { contextLength: number; temperature: number; topP: number; maxTokens: number }
+export type PolicyAction = 'allow' | 'review' | 'block';
+export interface PolicyDefaults { defaultAction: PolicyAction; customConstraints: string; threshold: number }
+export type FieldRule = 'allow' | 'require' | 'mask' | 'review' | 'block';
+export interface EndpointOverride {
+  method: HttpMethod;
+  path: string;
+  requestPolicy: PolicyAction | null;
+  threshold: number | null;
+  fields: { name: string; rule: FieldRule; constraints: string }[];
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -333,4 +470,29 @@ export function usePaged<T>(path: string | null) {
 
 export function errorText(e: unknown): string {
   return e instanceof Error ? e.message : 'Request failed';
+}
+
+/**
+ * GET an endpoint that is proposed but may not exist yet. 404/405 → `missing`
+ * (the form renders empty and explains it); other failures → `error`.
+ */
+export function useProposed<T>(path: string) {
+  const api = useApi();
+  const [state, setState] = useState<{ data: T | null; status: 'loading' | 'ready' | 'missing' | 'error'; error: string | null }>(
+    { data: null, status: 'loading', error: null },
+  );
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    api<T>(path).then(
+      (data) => live && setState({ data, status: 'ready', error: null }),
+      (e: unknown) => {
+        if (!live) return;
+        const gone = e instanceof ApiError && (e.status === 404 || e.status === 405);
+        setState({ data: null, status: gone ? 'missing' : 'error', error: gone ? null : errorText(e) });
+      },
+    );
+    return () => { live = false; };
+  }, [api, path, tick]);
+  return { ...state, reload: useCallback(() => setTick((t) => t + 1), []) };
 }

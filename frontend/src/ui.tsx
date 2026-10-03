@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
-import { errorText, type AnalysisStatus, type PolicyState, type ProxyInstance } from './api';
+import { errorText, type AlertSeverity, type AnalysisStatus, type PolicyState, type ProxyInstance } from './api';
 import { Badge, Button, Card, Icon, Toast } from './components';
 
 type BadgeStatus = 'blocked' | 'passed' | 'review' | 'jev' | 'neutral';
@@ -36,6 +36,35 @@ export function Note({ tone = 'warn', children }: { tone?: 'warn' | 'error' | 'i
       <Icon name={icon} size={16} style={{ marginTop: 2 }} />
       <div>{children}</div>
     </div>
+  );
+}
+
+/** Marks a screen whose backend endpoint is only proposed (see CLAUDE.md). */
+export function ProposedNote({ routes }: { routes: string[] }) {
+  return (
+    <Note tone="info">
+      Backend endpoint not available yet. Values load from and save to{' '}
+      {routes.map((r, i) => <span key={r}>{i > 0 && ', '}<code className="mono">{r}</code></span>)};
+      saving fails until it exists.
+    </Note>
+  );
+}
+
+export const SEVERITY: Record<AlertSeverity, BadgeStatus> = { critical: 'blocked', warning: 'review', info: 'jev' };
+
+export const pct = (n: number | null | undefined) => (n == null ? '—' : `${(n * 100).toFixed(1)}%`);
+
+/** Labelled native range slider with its value shown beside the label. */
+export function Slider(props: { label: string; hint?: string; min: number; max: number; step: number; value: number | null; digits?: number; disabled?: boolean; onChange: (n: number) => void }) {
+  return (
+    <label className="stack" style={{ gap: 'var(--space-1)' }}>
+      <span className="spread small" style={{ fontWeight: 500, color: 'var(--text-strong)' }}>
+        {props.label}<output className="mono">{props.value === null ? 'not set' : props.value.toFixed(props.digits ?? 0)}</output>
+      </span>
+      <input type="range" min={props.min} max={props.max} step={props.step} value={props.value ?? props.min} disabled={props.disabled}
+        onChange={(e) => props.onChange(Number(e.target.value))} />
+      {props.hint && <span className="small muted">{props.hint}</span>}
+    </label>
   );
 }
 

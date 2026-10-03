@@ -5,13 +5,17 @@ import { Badge, Button, Dialog, Input, Select, StatTile, Tabs } from '../compone
 import { useOrg } from '../Layout';
 import { LoadMore, Loading, Note, PageHead, ProxyBadges, Section, useAction, when } from '../ui';
 import { ProjectAnalyses } from './ProjectAnalyses';
+import { ProjectOperations } from './ProjectOperations';
 import { ProjectPolicies } from './ProjectPolicies';
+import { ProjectTuning } from './ProjectTuning';
 import { RuntimeConfigFields, toDraft, validateRuntime } from './RuntimeConfigFields';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'operations', label: 'Operations' },
   { id: 'policies', label: 'Policies' },
   { id: 'analyses', label: 'Analyses' },
+  { id: 'tuning', label: 'Tuning' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -32,6 +36,8 @@ export function Project() {
       <PageHead title={p.name} desc={<span className="mono">{p.slug} → {p.runtimeConfiguration.upstreamUrl}</span>} />
       <Tabs tabs={TABS} value={tab} onChange={(id) => setParams({ tab: id }, { replace: true })} style={{ marginBottom: 'var(--space-6)' }} />
       {tab === 'overview' && <Overview path={path} />}
+      {tab === 'operations' && <ProjectOperations path={path} />}
+      {tab === 'tuning' && <ProjectTuning path={path} />}
       {tab === 'policies' && <ProjectPolicies path={path} />}
       {tab === 'analyses' && <ProjectAnalyses path={path} />}
       {tab === 'settings' && <Settings key={p.updatedAt} project={p} path={path} reload={project.reload} />}
@@ -154,7 +160,7 @@ function Repository({ path }: { path: string }) {
   const installs = useResource<GitHubInstallation[]>(`/organizations/${org.id}/github-installations`);
   const [installationId, setInstallationId] = useState('');
   const [full, setFull] = useState('');
-  const [ownerName, repoName] = full.trim().replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '').split('/');
+  const [ownerName, repoName] = full.trim().replace(/^https:\/\/github\.com\//, '').replace(/\/+$/, '').replace(/\.git$/, '').split('/');
   const chosen = installationId || String(installs.data?.[0]?.installationId ?? '');
 
   const bind = () =>
@@ -180,7 +186,7 @@ function Repository({ path }: { path: string }) {
           <form className="row" onSubmit={(e) => { e.preventDefault(); void bind(); }}>
             <Select label="Installation" value={chosen} onChange={(e) => setInstallationId(e.target.value)}
               options={installs.data.map((i) => ({ value: String(i.installationId), label: i.accountLogin }))} />
-            <div className="grow"><Input label="Repository" mono placeholder="acme/checkout-api" value={full} onChange={(e) => setFull(e.target.value)} /></div>
+            <div className="grow"><Input label="GitHub repository URL or slug" mono placeholder="https://github.com/org/repo or org/repo" value={full} onChange={(e) => setFull(e.target.value)} /></div>
             <Button type="submit" disabled={run.pending || !ownerName || !repoName}>Bind</Button>
           </form>
         )
