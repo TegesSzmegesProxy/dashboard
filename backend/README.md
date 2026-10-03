@@ -65,6 +65,17 @@ Proxies use deployment keys to call
 `Tessera-Bundle-Schemas` and `Tessera-Tool-Registries` headers and optional
 `If-None-Match`. They report status to `POST /api/v1/proxy/heartbeats`.
 
+### JEV credential
+
+Owners and admins set the organization's JEV API key with
+`PUT /api/v1/organizations/:organizationId/integrations/jev` (`apiKey`),
+read its status with `GET` and disconnect it with `DELETE`. The key is
+encrypted with `CREDENTIAL_ENCRYPTION_KEY` (`openssl rand -base64 32`) and
+never returned to the dashboard; without that variable saving returns `503`.
+Proxies fetch it from `GET /api/v1/proxy/jev-credential` with a deployment
+key that has the opt-in `jev-credentials:read` scope; `404` means no
+credential is configured. See ADR-0009.
+
 ### Application analysis
 
 Collectors send `POST /api/v1/tenants/:tenantId/analysis-uploads` with a

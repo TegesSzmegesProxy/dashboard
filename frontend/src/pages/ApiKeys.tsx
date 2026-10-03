@@ -96,6 +96,8 @@ function NewKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const [scopes, setScopes] = useState<ApiKeyScope[]>([]);
   const [tenants, setTenants] = useState<string[]>([]);
   const toggle = <T,>(list: T[], v: T, on: boolean) => (on ? [...list, v] : list.filter((x) => x !== v));
+  // jev-credentials:read hands out a plaintext secret, so it is opt-in.
+  const defaultScopes = (t: ApiKeyType) => SCOPES_BY_TYPE[t].filter((s) => s !== 'jev-credentials:read');
   const valid = name.trim() && type && scopes.length && tenants.length;
 
   const submit = () =>
@@ -119,7 +121,7 @@ function NewKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreated: 
           <div className="actions" style={{ gap: 'var(--space-5)' }}>
             {(['collector', 'deployment'] as const).map((t) => (
               <Radio key={t} name="type" value={t} label={t === 'collector' ? 'Collector' : 'Deployment'} checked={type === t}
-                onChange={() => { setType(t); setScopes(SCOPES_BY_TYPE[t]); }} />
+                onChange={() => { setType(t); setScopes(defaultScopes(t)); }} />
             ))}
           </div>
         </div>

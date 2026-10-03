@@ -15,6 +15,7 @@ export interface Environment {
   MACHINE_AUTH_RATE_LIMIT_PER_MINUTE: number;
   MACHINE_AUTH_RATE_LIMIT_FAILURE_BEHAVIOR: 'allow' | 'deny';
   BUNDLE_SIGNING_PRIVATE_KEY: string;
+  CREDENTIAL_ENCRYPTION_KEY?: string;
   ANALYSIS_STORAGE_DIR: string;
   GITHUB_APP_ID?: string;
   GITHUB_APP_PRIVATE_KEY?: string;
@@ -54,6 +55,16 @@ export const environmentSchema = Joi.object<Environment>({
     .trim()
     .pattern(/-----BEGIN PRIVATE KEY-----/)
     .required(),
+  // 32 random bytes, base64. Without it integration credentials cannot be
+  // stored or delivered; there is no plaintext fallback.
+  CREDENTIAL_ENCRYPTION_KEY: Joi.string()
+    .empty('')
+    .base64()
+    .custom((value: string, helpers) =>
+      Buffer.from(value, 'base64').length === 32
+        ? value
+        : helpers.error('any.invalid'),
+    ),
   ANALYSIS_STORAGE_DIR: Joi.string().trim().default('./var/analysis-storage'),
   GITHUB_APP_ID: Joi.string().empty('').pattern(/^\d+$/),
   GITHUB_APP_PRIVATE_KEY: Joi.string()

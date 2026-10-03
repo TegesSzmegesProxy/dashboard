@@ -25,7 +25,8 @@ export interface AuditRecord {
     | 'analysis'
     | 'policyGeneration'
     | 'operationalAlert'
-    | 'alertSettings';
+    | 'alertSettings'
+    | 'integrationCredential';
   targetId: string;
   metadata?: Record<string, string>;
 }

@@ -4,11 +4,11 @@ import { Badge, Button, Dialog, Input, Select } from '../components';
 import { useOrg } from '../Layout';
 import { Loading, Note, ProposedNote, Section, useAction, when } from '../ui';
 
-// Mockup-only: no backend endpoint stores these credentials yet (see CLAUDE.md, "Proposed endpoints").
+// JEV is backed by the integrations module (ADR-0009); the AI model credential is still a proposed endpoint.
 // The key is write-only: it is sent once, cleared from state, and never read back or displayed.
 
-function Credential<T extends { connected: boolean }>({ title, desc, path, required, fields, status }: {
-  title: string; desc: string; path: string; required: string[];
+function Credential<T extends { connected: boolean }>({ title, desc, path, required, fields, status, disconnectNote }: {
+  title: string; desc: string; path: string; required: string[]; disconnectNote: string;
   fields: (set: (k: string, v: string) => void, values: Record<string, string>) => React.ReactNode;
   status: (d: T) => string;
 }) {
@@ -51,7 +51,7 @@ function Credential<T extends { connected: boolean }>({ title, desc, path, requi
         )}
       </div>
       <Dialog open={confirm} title={`Disconnect ${title}?`} onClose={() => setConfirm(false)}
-        description="Projects stop using this credential immediately. Features that depend on it fail until a new key is saved."
+        description={disconnectNote}
         actions={<>
           <Button variant="ghost" onClick={() => setConfirm(false)}>Cancel</Button>
           <Button variant="danger" disabled={run.pending} onClick={() => void run.go(() => api(full, { method: 'DELETE' }), 'Disconnected').then((ok) => { if (ok) { setConfirm(false); r.reload(); } })}>Disconnect</Button>
@@ -66,8 +66,10 @@ const keyInput = (set: (k: string, v: string) => void, v: Record<string, string>
 
 export function JevIntegrationCard() {
   return (
-    <Credential title="Global JEV integration" desc="Shared by all projects." path="jev" required={['apiKey']}
-      status={(d: JevIntegration) => `API key verified · last checked ${when(d.lastCheckedAt)}`}
+    <Credential title="Global JEV integration" path="jev" required={['apiKey']}
+      desc="Shared by all projects. Proxies fetch it with a deployment key that has the jev-credentials:read scope."
+      disconnectNote="Proxies drop the key on their next fetch. Until a new key is saved, JEV is unavailable and each project applies its failure behavior."
+      status={(d: JevIntegration) => `Version ${d.version ?? '—'} · updated ${when(d.updatedAt)}`}
       fields={keyInput} />
   );
 }
@@ -75,6 +77,7 @@ export function JevIntegrationCard() {
 export function AiModelCard() {
   return (
     <Credential title="Global AI model API key" desc="Default model credentials for all projects." path="ai-model" required={['provider', 'apiKey']}
+      disconnectNote="Projects stop using this credential immediately. Features that depend on it fail until a new key is saved."
       status={(d: AiModelIntegration) => `${d.provider ?? 'provider'} · updated ${when(d.lastUpdatedAt)}`}
       fields={(set, v) => (
         <>

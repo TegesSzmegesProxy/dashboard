@@ -34,6 +34,7 @@ src/
     policy-compiler/       structured policy to registered toolchain
     approvals/             approve/reject workflow
     bundles/               activation, signing and distribution
+    integrations/          organization integration credentials (JEV)
     telemetry/             redacted summaries and proxy health
     audit/                 immutable administrative audit trail
     health/                liveness and readiness
@@ -68,6 +69,8 @@ trusted as authorization.
   health and last-seen time.
 - `TelemetryBucket`: redacted aggregate counters; never raw request bodies,
   field values, authorization headers or cookies.
+- `JevCredential`: one per organization, AES-256-GCM encrypted key, version
+  and update metadata. The key is never returned to the dashboard.
 - `AuditEntry`: actor, action, target, timestamp and safe metadata.
 
 ## 4. Persistence and infrastructure
@@ -267,7 +270,9 @@ only after an explicit project decision changes this policy.
 
 1. Dashboard identity uses Auth0 access tokens; authorization roles remain
    `owner`, `admin`, and `viewer` memberships stored by Tessera. See ADR-0001.
-2. Whether JEV credentials are customer-managed per proxy or platform-managed.
+2. JEV credentials are managed per organization in the control plane,
+   encrypted at rest and pulled by proxies with an opt-in deployment scope.
+   See ADR-0009.
 3. Exact JEV API contract.
 4. Runtime configuration requires an explicit `failureBehavior` value when a
    proxy has neither a valid remote bundle nor a last known good bundle. See

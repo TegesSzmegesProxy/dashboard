@@ -11,10 +11,11 @@ export type ApiKeyScope =
   | 'analysis-uploads:write'
   | 'bundles:read'
   | 'heartbeats:write'
-  | 'telemetry:write';
+  | 'telemetry:write'
+  | 'jev-credentials:read';
 export const SCOPES_BY_TYPE: Record<ApiKeyType, ApiKeyScope[]> = {
   collector: ['analysis-uploads:write'],
-  deployment: ['bundles:read', 'heartbeats:write', 'telemetry:write'],
+  deployment: ['bundles:read', 'heartbeats:write', 'telemetry:write', 'jev-credentials:read'],
 };
 
 export interface Page<T> {
@@ -327,6 +328,9 @@ export interface PolicyGeneration {
   finishedAt: string | null;
 }
 
+/** Organization JEV credential (ADR-0009). The key itself is write-only. */
+export interface JevIntegration { connected: boolean; version: number | null; updatedAt: string | null }
+
 /** Customer-visible manifest of one collector upload. */
 export interface AnalysisUpload {
   id: string;
@@ -346,7 +350,6 @@ export interface AnalysisUpload {
 // ---------- PROPOSED contracts: in the mockups, NOT in the backend yet ----------
 // Every path below is a suggestion for the backend. See "Proposed endpoints" in CLAUDE.md.
 
-export interface JevIntegration { connected: boolean; lastCheckedAt: string | null }
 export interface AiModelIntegration { connected: boolean; provider: 'openai' | 'anthropic' | 'custom' | null; lastUpdatedAt: string | null }
 export interface ModelSettings { contextLength: number; temperature: number; topP: number; maxTokens: number }
 export type PolicyAction = 'allow' | 'review' | 'block';
