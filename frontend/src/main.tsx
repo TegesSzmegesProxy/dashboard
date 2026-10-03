@@ -45,6 +45,8 @@ createRoot(document.getElementById('root')!).render(
       // Rotation enabled on the Auth0 application.
       useRefreshTokens
       cacheLocation="localstorage"
+      // The GitHub App callback also carries `code` and `state`; they are not Auth0's.
+      skipRedirectCallback={window.location.pathname === '/github/callback'}
       authorizationParams={{
         audience: import.meta.env.VITE_AUTH0_AUDIENCE,
         redirect_uri: window.location.origin,
