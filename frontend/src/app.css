@@ -142,7 +142,7 @@ textarea.textarea:focus { outline: none; border-color: var(--blue-500); box-shad
 .center { min-height: 100vh; display: grid; place-items: center; padding: var(--space-6); }
 .gate {
   min-height: 100vh; display: grid; place-items: center; padding: var(--space-6);
-  background: var(--ink-900) url('@ds/assets/pixel/hero-amphitheatre-night-4x.png') center bottom / cover no-repeat;
+  background: var(--ink-900) url('./assets/hero-amphitheatre-night-4x.png') center bottom / cover no-repeat;
   image-rendering: pixelated;
 }
 .gate > * { image-rendering: auto; }

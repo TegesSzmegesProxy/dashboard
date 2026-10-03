@@ -1,5 +1,5 @@
 import type { Behavior, RuntimeConfiguration } from '../api';
-import { Input, Radio } from '../ds';
+import { Input, Radio } from '../components';
 
 /** String-typed form state; nothing is pre-filled (ADR-0002: no invented defaults). */
 export interface RuntimeDraft {

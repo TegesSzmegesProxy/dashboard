@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { SCOPES_BY_TYPE, useApi, usePaged, type ApiKey, type ApiKeyScope, type ApiKeyType, type RevealedApiKey } from '../api';
-import { Badge, Button, Checkbox, Dialog, IconButton, Input, Radio, Tag, Ticket } from '../ds';
+import { Badge, Button, Checkbox, Dialog, IconButton, Input, Radio, Tag, Ticket } from '../components';
 import { useOrg } from '../Layout';
 import { LoadMore, Loading, newIdempotencyKey, Note, PageHead, Section, useAction, useToast, when } from '../ui';
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApi, usePaged, type PolicyVersion, type StructuredPolicy } from '../api';
-import { Button, Dialog, Input } from '../ds';
+import { Button, Dialog, Input } from '../components';
 import { useOrg } from '../Layout';
 import { LoadMore, Loading, newIdempotencyKey, Note, PolicyBadge, Section, useAction, when } from '../ui';
 

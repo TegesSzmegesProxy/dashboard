@@ -2,7 +2,7 @@ import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
 import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import './ds';
+import './components';
 import './app.css';
 import { Layout } from './Layout';
 import { ApiKeys } from './pages/ApiKeys';
@@ -11,7 +11,7 @@ import { GitHubCallback } from './pages/GitHubCallback';
 import { OrgGate } from './pages/OrgGate';
 import { OrgSettings } from './pages/OrgSettings';
 import { Project } from './pages/Project';
-import { Button, Card } from './ds';
+import { Button, Card } from './components';
 import { ToastHost } from './ui';
 
 function RequireLogin({ children }: { children: ReactNode }) {

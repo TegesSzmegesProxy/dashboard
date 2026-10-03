@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { usePaged, useResource, type Analysis, type AnalysisSummary, type Severity } from '../api';
-import { Badge, Dialog } from '../ds';
+import { Badge, Dialog } from '../components';
 import { AnalysisBadge, LoadMore, Loading, Note, Section, short, when } from '../ui';
 
 const SEV: Record<Severity, 'blocked' | 'review' | 'neutral'> = {

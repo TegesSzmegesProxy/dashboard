@@ -13,7 +13,6 @@
     "allowUmdGlobalAccess": true,
     "isolatedModules": true,
     "types": ["vite/client"],
-    "paths": { "@ds/*": ["./Tessera Design System/*"] }
   },
   "include": ["src"]
 }

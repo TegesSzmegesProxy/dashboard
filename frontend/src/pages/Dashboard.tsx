@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApi, useResource, type ApiKey, type GitHubInstallation, type Membership, type Page, type Project } from '../api';
-import { Badge, Button, Dialog, Input, StatTile } from '../ds';
+import { Badge, Button, Dialog, Input, StatTile } from '../components';
 import { useOrg } from '../Layout';
 import { Note, PageHead, Section, useAction, when } from '../ui';
 import { emptyRuntime, RuntimeConfigFields, validateRuntime, type RuntimeDraft } from './RuntimeConfigFields';

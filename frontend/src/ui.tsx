@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 import { errorText, type AnalysisStatus, type PolicyState, type ProxyInstance } from './api';
-import { Badge, Button, Card, Icon, Toast } from './ds';
+import { Badge, Button, Card, Icon, Toast } from './components';
 
 type BadgeStatus = 'blocked' | 'passed' | 'review' | 'jev' | 'neutral';
 

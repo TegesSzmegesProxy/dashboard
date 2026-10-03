@@ -2,7 +2,7 @@ import { useAuth0 } from '@auth0/auth0-react';
 import { createContext, useContext } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { useResource, type Organization, type Page, type Project } from './api';
-import { Badge, Icon, IconButton } from './ds';
+import { Badge, Icon, IconButton } from './components';
 import { Loading, Note } from './ui';
 
 interface OrgCtx {

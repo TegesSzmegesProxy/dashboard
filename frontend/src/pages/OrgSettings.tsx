@@ -1,7 +1,7 @@
 import { useAuth0 } from '@auth0/auth0-react';
 import { useState } from 'react';
 import { useApi, usePaged, useResource, type GitHubInstallation, type Membership, type Organization, type Role } from '../api';
-import { Badge, Button, Dialog, IconButton, Input, Select } from '../ds';
+import { Badge, Button, Dialog, IconButton, Input, Select } from '../components';
 import { useOrg } from '../Layout';
 import { LoadMore, Loading, Note, PageHead, Section, useAction, when } from '../ui';
 

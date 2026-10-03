@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useApi, usePaged, useResource, type ActiveBundle, type GitHubInstallation, type Project as ProjectT, type ProxyInstance, type RepositoryBinding } from '../api';
-import { Badge, Button, Dialog, Input, Select, StatTile, Tabs } from '../ds';
+import { Badge, Button, Dialog, Input, Select, StatTile, Tabs } from '../components';
 import { useOrg } from '../Layout';
 import { LoadMore, Loading, Note, PageHead, ProxyBadges, Section, useAction, when } from '../ui';
 import { ProjectAnalyses } from './ProjectAnalyses';

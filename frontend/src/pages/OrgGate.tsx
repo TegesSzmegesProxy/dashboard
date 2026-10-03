@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useApi, useResource, type Organization, type Page } from '../api';
-import { Button, Card, Input } from '../ds';
+import { Button, Card, Input } from '../components';
 import { Loading, Note, useAction } from '../ui';
 
 /** `/`: pick up the last organization, or create the first one. */

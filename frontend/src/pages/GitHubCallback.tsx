@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { errorText, useApi } from '../api';
-import { Card } from '../ds';
+import { Card } from '../components';
 import { Loading, Note } from '../ui';
 
 /** GitHub App setup callback: links `installation_id` to the org carried in `state`. */
