@@ -40,6 +40,11 @@ createRoot(document.getElementById('root')!).render(
     <Auth0Provider
       domain={import.meta.env.VITE_AUTH0_DOMAIN}
       clientId={import.meta.env.VITE_AUTH0_CLIENT_ID}
+      // Survive page reloads: the default in-memory cache relies on a silent-auth
+      // iframe that browsers block (third-party cookies). Needs Refresh Token
+      // Rotation enabled on the Auth0 application.
+      useRefreshTokens
+      cacheLocation="localstorage"
       authorizationParams={{
         audience: import.meta.env.VITE_AUTH0_AUDIENCE,
         redirect_uri: window.location.origin,
