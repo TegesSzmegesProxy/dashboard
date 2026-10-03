@@ -82,10 +82,11 @@
     <nav aria-label="Primary">
       <ul class="nav">
         <li><a href="#">Dashboard</a></li>
-        <li><a href="#" class="active" aria-current="page">Projects</a></li>
-        <li><a href="#">Settings</a></li>
-        <li><a href="#">API Keys</a></li>
-        <li><a href="#">Policies</a></li>
+        <li><a href="#repo-card" class="active" aria-current="page">Repository configuration</a></li>
+        <li><a href="#context-card">Context window</a></li>
+        <li><a href="#sampling-card">Model sampling</a></li>
+        <li><a href="#global-pol-card">Global policies & thresholds</a></li>
+        <li><a href="#endpoints-card">Endpoint management</a></li>
       </ul>
     </nav>
   </aside>
@@ -98,7 +99,7 @@
     </header>
 
     <!-- ===== Repository configuration ===== -->
-    <section class="card" aria-labelledby="repo-h">
+    <section class="card" aria-labelledby="repo-h" id="repo-card">
       <h2 id="repo-h">Repository Configuration</h2>
       <p class="desc">Link the GitHub repository for this project.</p>
       <div class="row">
@@ -111,7 +112,7 @@
     </section>
 
     <!-- ===== Context window ===== -->
-    <section class="card" aria-labelledby="context-h">
+    <section class="card" aria-labelledby="context-h" id="context-card">
       <h2 id="context-h">Context Window</h2>
       <p class="desc">How much request history is included as context.</p>
       <div class="range-head">
@@ -122,7 +123,7 @@
     </section>
 
     <!-- ===== Model sampling ===== -->
-    <section class="card" aria-labelledby="sampling-h">
+    <section class="card" aria-labelledby="sampling-h" id="sampling-card">
       <h2 id="sampling-h">Model Sampling</h2>
       <p class="desc">Controls how model output is generated.</p>
       <div class="grid-3">
@@ -145,7 +146,7 @@
     </section>
 
     <!-- ===== Global policies & thresholds ===== -->
-    <section class="card" aria-labelledby="global-pol-h">
+    <section class="card" aria-labelledby="global-pol-h" id="global-pol-card">
       <h2 id="global-pol-h">Global Policies &amp; Thresholds</h2>
       <p class="desc">Defaults applied to every endpoint unless overridden below.</p>
       <div class="grid-2">
@@ -173,7 +174,7 @@
     </section>
 
     <!-- ===== Endpoint-specific management ===== -->
-    <section class="card" aria-labelledby="endpoints-h">
+    <section class="card" aria-labelledby="endpoints-h" id="endpoints-card">
       <h2 id="endpoints-h">Endpoint-Specific Management</h2>
       <p class="desc">Override policies and thresholds per endpoint, per request and per field.</p>
 
