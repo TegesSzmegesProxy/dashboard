@@ -1,0 +1,66 @@
+# Local development stack. Ports bind to loopback.
+# `docker compose up` starts only MongoDB and Redis; add `--profile app` to
+# also build and run the API container.
+name: tessera-control-plane
+
+services:
+  mongodb:
+    image: mongo:8.2
+    # Transactions require a replica set; a single member is enough locally.
+    command: ['--replSet', 'rs0', '--bind_ip_all']
+    ports:
+      - '127.0.0.1:27017:27017'
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      # Initiates the replica set on first run, then reports its status.
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+
+  redis:
+    image: redis:8.2-alpine
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    profiles: ['app']
+    build: .
+    # Secrets (API_KEY_HASH_SECRET, BUNDLE_SIGNING_PRIVATE_KEY, ...) come from
+    # .env; connection settings below override it for the container network.
+    env_file: .env
+    environment:
+      PORT: '5000'
+      # The replica set advertises localhost, so connect to the member directly.
+      MONGODB_URI: mongodb://mongodb:27017/?directConnection=true
+      REDIS_URL: redis://redis:6379
+      ANALYSIS_STORAGE_DIR: /app/var/analysis-storage
+    ports:
+      # Host port 5000 is often taken by the macOS AirPlay Receiver.
+      - '127.0.0.1:${API_PORT:-5050}:5000'
+    volumes:
+      - analysis-storage:/app/var/analysis-storage
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  mongodb-data:
+  redis-data:
+  analysis-storage:

@@ -5,6 +5,7 @@ import { MongoDatabase } from '../../infrastructure/database/mongo-database.serv
 export interface AuditRecord {
   organizationId: ObjectId;
   tenantId?: ObjectId;
+  /** Dashboard subject, or `machine:<apiKeyId>` for machine credentials. */
   actorSubject: string;
   action: string;
   targetType:
@@ -13,7 +14,12 @@ export interface AuditRecord {
     | 'tenant'
     | 'apiKey'
     | 'policyVersion'
-    | 'policySelection';
+    | 'policySelection'
+    | 'bundle'
+    | 'githubInstallation'
+    | 'tenantRepository'
+    | 'analysisUpload'
+    | 'analysis';
   targetId: string;
   metadata?: Record<string, string>;
 }

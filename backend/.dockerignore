@@ -1,0 +1,9 @@
+node_modules
+dist
+var
+test
+.env
+.env.*
+*.pem
+*.tsbuildinfo
+.DS_Store

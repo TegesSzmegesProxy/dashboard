@@ -1,17 +1,28 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { Environment } from './config/environment.js';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService<Environment, true>);
   const apiPrefix = config.get('API_PREFIX', { infer: true });
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        // TLS is terminated in front of the API, where HSTS enforces HTTPS.
+        // Upgrading subresources breaks Swagger UI on plain-HTTP localhost.
+        directives: { upgradeInsecureRequests: null },
+      },
+    }),
+  );
+  // Collector environment packages can list thousands of dependencies.
+  app.useBodyParser('json', { limit: '5mb' });
   app.enableCors({
     origin: config.get('CORS_ORIGINS', { infer: true }).split(','),
     credentials: true,

@@ -13,9 +13,16 @@
 - **Proxy (data plane)**: the customer-deployed enforcement process that
   analyzes requests and forwards only allowed traffic to the upstream.
 - **Upstream**: the protected application behind the proxy.
-- **Collector**: a customer-side CI step or CLI that gathers and redacts source
-  and environment context before uploading it.
-- **Analysis**: an immutable, versioned interpretation of a collector upload,
+- **Collector**: a customer-side CI step or CLI that runs environment tools
+  (for example Syft and Trivy), redacts their output, and uploads it with the
+  commit SHA to analyze. It never uploads source files.
+- **Repository binding**: the one GitHub repository an organization
+  administrator assigns to a project. Analysis source always comes from it.
+- **Source manifest**: the customer-visible record of which repository files
+  were retained for an analysis, which were excluded and why, and how many
+  values were redacted.
+- **Analysis**: an immutable, versioned interpretation of a collector upload
+  and the bound repository at its commit,
   including API surface, dependencies, CVEs, environment, and findings with
   provenance.
 - **Policy version**: immutable human intent plus its validated structured form
@@ -31,6 +38,11 @@
 - **Active version**: the bundle selected by the control plane for distribution.
   It can differ from the version currently loaded by a running proxy.
 - **Loaded version**: the verified bundle currently used by a proxy process.
+- **Restart required**: a proxy state shown in the dashboard when a compatible
+  proxy's loaded version differs from the active version. Proxies never
+  hot-swap bundles; a restart loads the active version.
+- **Heartbeat**: a proxy's periodic report of its loaded versions, supported
+  bundle schemas and tool registries, and health. It is display state only.
 - **Last known good**: the most recent bundle a proxy successfully verified and
   persisted for use during control-plane outages or invalid pulls.
 - **Deployment key**: a revocable credential used by a proxy to pull bundles

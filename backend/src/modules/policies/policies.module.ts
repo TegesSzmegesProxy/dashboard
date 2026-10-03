@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { BundlesModule } from '../bundles/bundles.module.js';
 import { EventsModule } from '../events/events.module.js';
 import { OrganizationsModule } from '../organizations/organizations.module.js';
 import { PolicyCompilerModule } from '../policy-compiler/policy-compiler.module.js';
@@ -12,6 +13,7 @@ import { PoliciesService } from './policies.service.js';
   imports: [
     AuthModule,
     AuditModule,
+    BundlesModule,
     EventsModule,
     OrganizationsModule,
     PolicyCompilerModule,

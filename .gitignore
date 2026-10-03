@@ -6,3 +6,4 @@ backend/.env
 backend/.env.*
 !backend/.env.example
 .DS_Store
+backend/bundle-signing.pem

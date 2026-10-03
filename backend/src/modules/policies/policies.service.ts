@@ -17,6 +17,7 @@ import { isDuplicateKey, objectId } from '../../common/mongodb.js';
 import { TOOL_REGISTRY_VERSION } from '../../contracts/policy/v1/policy.contract.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { BundlesService } from '../bundles/bundles.service.js';
 import { OutboxService } from '../events/outbox.service.js';
 import { PolicyCompilerService } from '../policy-compiler/policy-compiler.service.js';
 import { ProjectsService } from '../projects/projects.service.js';
@@ -49,6 +50,7 @@ export class PoliciesService implements OnModuleInit {
     private readonly outbox: OutboxService,
     private readonly compiler: PolicyCompilerService,
     private readonly projects: ProjectsService,
+    private readonly bundles: BundlesService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -142,7 +144,7 @@ export class PoliciesService implements OnModuleInit {
           },
           session,
         );
-        await this.outbox.appendPolicyEvent(
+        await this.outbox.append(
           'PolicyImported',
           organizationObjectId,
           tenantObjectId,
@@ -150,7 +152,7 @@ export class PoliciesService implements OnModuleInit {
           { version },
           session,
         );
-        await this.outbox.appendPolicyEvent(
+        await this.outbox.append(
           compilation.ok ? 'PolicyCompiled' : 'PolicyCompilationFailed',
           organizationObjectId,
           tenantObjectId,
@@ -275,7 +277,7 @@ export class PoliciesService implements OnModuleInit {
         if (!updated) throw new ConflictException('Policy state changed');
         const eventType =
           decision === 'approve' ? 'PolicyApproved' : 'PolicyRejected';
-        await this.outbox.appendPolicyEvent(
+        await this.outbox.append(
           eventType,
           organizationObjectId,
           tenantObjectId,
@@ -326,6 +328,18 @@ export class PoliciesService implements OnModuleInit {
             'Only approved, compiled policies can be activated',
           );
         }
+        // Re-activating the selected policy rebuilds its bundle, which is how
+        // edited runtime configuration reaches proxies.
+        const bundle = await this.bundles.activate(
+          {
+            organizationId: organizationObjectId,
+            tenantId: tenantObjectId,
+            policyVersion: version,
+            compiledPolicy: document.compiledPolicy!,
+            actorSubject,
+          },
+          session,
+        );
         const current = await this.activePointers.findOne(
           { organizationId: organizationObjectId, tenantId: tenantObjectId },
           { session },
@@ -348,12 +362,12 @@ export class PoliciesService implements OnModuleInit {
           },
           { upsert: true, session },
         );
-        await this.outbox.appendPolicyEvent(
+        await this.outbox.append(
           'PolicyActivated',
           organizationObjectId,
           tenantObjectId,
           version,
-          { version },
+          { version, bundleVersion: bundle.bundleVersion },
           session,
         );
         await this.audit.append(
@@ -364,7 +378,7 @@ export class PoliciesService implements OnModuleInit {
             action: 'policy-version.activated',
             targetType: 'policySelection',
             targetId: tenantObjectId.toHexString(),
-            metadata: { version },
+            metadata: { version, bundleVersion: bundle.bundleVersion },
           },
           session,
         );

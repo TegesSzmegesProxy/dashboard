@@ -1,0 +1,1032 @@
+openapi: 3.0.0
+paths:
+  /api/v1/organizations:
+    post:
+      operationId: OrganizationsController_create
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - organizations
+    get:
+      operationId: OrganizationsController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - organizations
+  /api/v1/organizations/{organizationId}:
+    get:
+      operationId: OrganizationsController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - organizations
+    patch:
+      operationId: OrganizationsController_update
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrganizationDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - organizations
+  /api/v1/organizations/{organizationId}/memberships:
+    get:
+      operationId: MembershipsController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - organization memberships
+    post:
+      operationId: MembershipsController_create
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMembershipDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - organization memberships
+  /api/v1/organizations/{organizationId}/memberships/{membershipId}:
+    patch:
+      operationId: MembershipsController_update
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMembershipDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - organization memberships
+    delete:
+      operationId: MembershipsController_remove
+      parameters: []
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - organization memberships
+  /api/v1/organizations/{organizationId}/projects:
+    post:
+      operationId: ProjectsController_create
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - projects
+    get:
+      operationId: ProjectsController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - projects
+  /api/v1/organizations/{organizationId}/projects/{tenantId}:
+    get:
+      operationId: ProjectsController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - projects
+    patch:
+      operationId: ProjectsController_update
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - projects
+    delete:
+      operationId: ProjectsController_remove
+      parameters: []
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - projects
+  /api/v1/organizations/{organizationId}/api-keys:
+    post:
+      operationId: ApiKeysController_create
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - API keys
+    get:
+      operationId: ApiKeysController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - API keys
+  /api/v1/organizations/{organizationId}/api-keys/{apiKeyId}/rotate:
+    post:
+      operationId: ApiKeysController_rotate
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - API keys
+  /api/v1/organizations/{organizationId}/api-keys/{apiKeyId}/revoke:
+    post:
+      operationId: ApiKeysController_revoke
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - API keys
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policies/import:
+    post:
+      operationId: PoliciesController_import
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportPolicyDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - policies
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policies:
+    get:
+      operationId: PoliciesController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - policies
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policies/{version}:
+    get:
+      operationId: PoliciesController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - policies
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/bundles/active:
+    get:
+      operationId: BundlesController_getActive
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - bundles
+  /api/v1/tenants/{tenantId}/active-bundle:
+    get:
+      operationId: ProxyBundlesController_get
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: tessera-tool-registries
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: tessera-bundle-schemas
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '304':
+          description: ''
+        '406':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - proxy distribution
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policies/{version}/approve:
+    post:
+      operationId: ApprovalsController_approve
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - policy approvals
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policies/{version}/reject:
+    post:
+      operationId: ApprovalsController_reject
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectPolicyDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - policy approvals
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policies/{version}/activate:
+    post:
+      operationId: PolicyLifecycleController_activate
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - policy lifecycle
+  /api/v1/proxy/heartbeats:
+    post:
+      operationId: ProxyHeartbeatsController_record
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProxyHeartbeatV1Dto'
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - proxy distribution
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/proxies:
+    get:
+      operationId: ProxyStatusController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - proxy status
+  /api/v1/organizations/{organizationId}/github-installations:
+    post:
+      operationId: SourceRepositoriesController_linkInstallation
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkGitHubInstallationDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - source repositories
+    get:
+      operationId: SourceRepositoriesController_listInstallations
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - source repositories
+  /api/v1/organizations/{organizationId}/github-installations/{installationId}:
+    delete:
+      operationId: SourceRepositoriesController_unlinkInstallation
+      parameters: []
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - source repositories
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/repository:
+    put:
+      operationId: SourceRepositoriesController_bindRepository
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BindRepositoryDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - source repositories
+    get:
+      operationId: SourceRepositoriesController_getRepository
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - source repositories
+    delete:
+      operationId: SourceRepositoriesController_unbindRepository
+      parameters: []
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - source repositories
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/analyses:
+    get:
+      operationId: AnalysesController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/analyses/{analysisId}:
+    get:
+      operationId: AnalysesController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
+  /api/v1/tenants/{tenantId}/analysis-uploads:
+    post:
+      operationId: CollectorUploadsController_receive
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisUploadV1Dto'
+      responses:
+        '202':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - collector
+  /api/v1/tenants/{tenantId}/analysis-uploads/{uploadId}:
+    get:
+      operationId: CollectorUploadsController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - collector
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/analysis-uploads/{uploadId}:
+    get:
+      operationId: AnalysisUploadsController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
+  /api/v1/health:
+    get:
+      operationId: HealthController_getHealth
+      parameters: []
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                example:
+                  status: ok
+                  service: tessera-control-plane
+      tags:
+        - health
+info:
+  title: Tessera Control Plane API
+  description: Hosted control-plane API for Tessera
+  version: '1.0'
+  contact: {}
+tags: []
+servers: []
+components:
+  securitySchemes:
+    bearer:
+      scheme: bearer
+      bearerFormat: JWT
+      type: http
+  schemas:
+    CreateOrganizationDto:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Acme
+      required:
+        - name
+    UpdateOrganizationDto:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Acme
+    CreateMembershipDto:
+      type: object
+      properties:
+        subject:
+          type: string
+          description: Stable Auth0 subject identifier
+        role:
+          type: string
+          enum:
+            - owner
+            - admin
+            - viewer
+      required:
+        - subject
+        - role
+    UpdateMembershipDto:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+            - owner
+            - admin
+            - viewer
+      required:
+        - role
+    RoutingConfigurationDto:
+      type: object
+      properties:
+        pathPrefix:
+          type: string
+          example: /
+      required:
+        - pathPrefix
+    RuntimeThresholdsDto:
+      type: object
+      properties:
+        requestTimeoutMs:
+          type: number
+          minimum: 100
+          maximum: 120000
+        maxRequestBodyBytes:
+          type: number
+          minimum: 0
+          maximum: 104857600
+      required:
+        - requestTimeoutMs
+        - maxRequestBodyBytes
+    TenantRuntimeConfigurationDto:
+      type: object
+      properties:
+        upstreamUrl:
+          type: string
+          example: https://app.internal.example
+        failureBehavior:
+          type: string
+          enum:
+            - allow
+            - block
+        unknownEndpointBehavior:
+          type: string
+          enum:
+            - allow
+            - block
+        routing:
+          $ref: '#/components/schemas/RoutingConfigurationDto'
+        thresholds:
+          $ref: '#/components/schemas/RuntimeThresholdsDto'
+        samplingRate:
+          type: number
+          minimum: 0
+          maximum: 1
+      required:
+        - upstreamUrl
+        - failureBehavior
+        - unknownEndpointBehavior
+        - routing
+        - thresholds
+        - samplingRate
+    CreateTenantDto:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Checkout API
+        slug:
+          type: string
+          example: checkout-api
+        runtimeConfiguration:
+          $ref: '#/components/schemas/TenantRuntimeConfigurationDto'
+      required:
+        - name
+        - slug
+        - runtimeConfiguration
+    UpdateTenantDto:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Checkout API
+        slug:
+          type: string
+          example: checkout-api
+        runtimeConfiguration:
+          $ref: '#/components/schemas/TenantRuntimeConfigurationDto'
+    CreateApiKeyDto:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Production collector
+        type:
+          type: string
+          enum:
+            - collector
+            - deployment
+        scopes:
+          type: array
+          items:
+            type: string
+            enum:
+              - analysis-uploads:write
+              - bundles:read
+              - heartbeats:write
+              - telemetry:write
+        allowedTenantIds:
+          type: array
+          items:
+            type: string
+      required:
+        - name
+        - type
+        - scopes
+        - allowedTenantIds
+    PolicyToolConfigDto:
+      type: object
+      properties:
+        minLength:
+          type: number
+          minimum: 0
+          maximum: 1000000
+        maxLength:
+          type: number
+          minimum: 0
+          maximum: 1000000
+    PolicyToolDto:
+      type: object
+      properties:
+        toolId:
+          type: string
+          example: string_length
+        target:
+          type: string
+          example: body.username
+        config:
+          $ref: '#/components/schemas/PolicyToolConfigDto'
+      required:
+        - toolId
+        - target
+        - config
+    EndpointPolicyDto:
+      type: object
+      properties:
+        method:
+          type: string
+          enum:
+            - DELETE
+            - GET
+            - HEAD
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+        path:
+          type: string
+          example: /users/:id
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyToolDto'
+      required:
+        - method
+        - path
+        - tools
+    StructuredPolicyV1Dto:
+      type: object
+      properties:
+        schemaVersion:
+          type: string
+          enum:
+            - tessera.policy/v1
+        endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/EndpointPolicyDto'
+      required:
+        - schemaVersion
+        - endpoints
+    ImportPolicyDto:
+      type: object
+      properties:
+        humanReadableIntent:
+          type: string
+          maxLength: 10000
+        structuredPolicy:
+          $ref: '#/components/schemas/StructuredPolicyV1Dto'
+      required:
+        - humanReadableIntent
+        - structuredPolicy
+    RejectPolicyDto:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+      required:
+        - reason
+    HeartbeatTenantV1Dto:
+      type: object
+      properties:
+        tenantId:
+          type: string
+        bundleSource:
+          type: string
+          enum:
+            - remote
+            - last_known_good
+            - none
+        loadedBundleVersion:
+          type: string
+          description: Required unless bundleSource is none
+      required:
+        - tenantId
+        - bundleSource
+    ProxyHeartbeatV1Dto:
+      type: object
+      properties:
+        schemaVersion:
+          type: string
+          enum:
+            - tessera.heartbeat/v1
+        instanceId:
+          type: string
+          description: Random identifier of one proxy process
+        proxyVersion:
+          type: string
+          example: 0.1.0
+        supportedBundleSchemas:
+          example:
+            - tessera.bundle/v1
+          type: array
+          items:
+            type: string
+        supportedToolRegistries:
+          example:
+            - tessera.tools/v1
+          type: array
+          items:
+            type: string
+        health:
+          type: string
+          enum:
+            - ok
+            - degraded
+        tenants:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeartbeatTenantV1Dto'
+      required:
+        - schemaVersion
+        - instanceId
+        - proxyVersion
+        - supportedBundleSchemas
+        - supportedToolRegistries
+        - health
+        - tenants
+    LinkGitHubInstallationDto:
+      type: object
+      properties:
+        installationId:
+          type: number
+          description: installation_id from the GitHub App setup callback
+        code:
+          type: string
+          description: OAuth code from the GitHub App setup callback
+      required:
+        - installationId
+        - code
+    BindRepositoryDto:
+      type: object
+      properties:
+        installationId:
+          type: number
+        owner:
+          type: string
+          example: acme
+        name:
+          type: string
+          example: checkout-api
+      required:
+        - installationId
+        - owner
+        - name
+    SourceRevisionV1Dto:
+      type: object
+      properties:
+        commitSha:
+          type: string
+          description: Full 40-character Git commit SHA
+      required:
+        - commitSha
+    CollectorInfoV1Dto:
+      type: object
+      properties:
+        name:
+          type: string
+          example: tessera-collector
+        version:
+          type: string
+          example: 0.1.0
+      required:
+        - name
+        - version
+    EnvironmentToolRunV1Dto:
+      type: object
+      properties:
+        name:
+          type: string
+          example: syft
+        version:
+          type: string
+          example: 1.20.0
+        status:
+          type: string
+          enum:
+            - succeeded
+            - failed
+        error:
+          type: string
+          maxLength: 500
+      required:
+        - name
+        - version
+        - status
+    DependencyV1Dto:
+      type: object
+      properties:
+        name:
+          type: string
+          example: express
+        version:
+          type: string
+          example: 4.21.2
+        ecosystem:
+          type: string
+          example: npm
+        purl:
+          type: string
+          example: pkg:npm/express@4.21.2
+        source:
+          type: string
+          example: syft
+          description: Tool that reported it
+      required:
+        - name
+        - version
+        - ecosystem
+        - source
+    VulnerabilityV1Dto:
+      type: object
+      properties:
+        id:
+          type: string
+          example: CVE-2024-45590
+        packageName:
+          type: string
+          example: body-parser
+        installedVersion:
+          type: string
+          example: 1.20.2
+        fixedVersion:
+          type: string
+          example: 1.20.3
+        severity:
+          type: string
+          enum:
+            - unknown
+            - low
+            - medium
+            - high
+            - critical
+        source:
+          type: string
+          example: trivy
+          description: Tool that reported it
+      required:
+        - id
+        - packageName
+        - installedVersion
+        - severity
+        - source
+    EnvironmentContextV1Dto:
+      type: object
+      properties:
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvironmentToolRunV1Dto'
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/DependencyV1Dto'
+        vulnerabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/VulnerabilityV1Dto'
+      required:
+        - tools
+        - dependencies
+        - vulnerabilities
+    CollectorRedactionManifestV1Dto:
+      type: object
+      properties:
+        tool:
+          type: string
+          example: tessera-redactor
+        rules:
+          example:
+            - env-values
+          type: array
+          items:
+            type: string
+        redactedValueCount:
+          type: number
+          minimum: 0
+      required:
+        - tool
+        - rules
+        - redactedValueCount
+    AnalysisUploadV1Dto:
+      type: object
+      properties:
+        schemaVersion:
+          type: string
+          enum:
+            - tessera.analysis-upload/v1
+        sourceRevision:
+          $ref: '#/components/schemas/SourceRevisionV1Dto'
+        collector:
+          $ref: '#/components/schemas/CollectorInfoV1Dto'
+        environment:
+          $ref: '#/components/schemas/EnvironmentContextV1Dto'
+        redaction:
+          $ref: '#/components/schemas/CollectorRedactionManifestV1Dto'
+      required:
+        - schemaVersion
+        - sourceRevision
+        - collector
+        - environment
+        - redaction

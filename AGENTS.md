@@ -30,9 +30,11 @@ in versioned wire contracts, ultimately published as `@tessera/contracts`.
 - A proxy runs the last known good signed bundle when the control plane is
   unavailable. A failed build, validation, signature, or pull must never replace
   the currently active bundle.
-- The collector redacts source and environment context before upload. Never
-  persist or log secrets, raw request bodies, authorization headers, cookies,
-  or unredacted source.
+- The collector redacts environment context before upload and never uploads
+  source files. Source is fetched from the project's bound GitHub repository,
+  then filtered and redacted in memory before storage or AI processing
+  (ADR-0006). Never persist or log secrets, raw request bodies, authorization
+  headers, cookies, or unredacted source.
 - Derive organization and tenant access from the authenticated user or API
   key. Never trust a client-provided `organizationId` or `tenantId` as
   authorization.

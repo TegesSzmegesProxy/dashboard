@@ -55,8 +55,9 @@ trusted as authorization.
   unknown-endpoint behavior.
 - `ApiKey`: hash, type, scopes, organization, allowed tenants, timestamps,
   revocation state. Plaintext is returned once.
-- `AnalysisUpload`: source revision, schema version, object-storage reference,
-  redaction manifest and processing state.
+- `AnalysisUpload`: source revision, schema version, collector identity,
+  environment summary and collector redaction manifest. The raw package lives
+  in transient object storage until its analysis finishes.
 - `Analysis`: immutable version, API surface, dependencies, CVEs, environment,
   findings and source attribution.
 - `PolicyVersion`: immutable human intent, structured intent, compilation state,
@@ -75,8 +76,9 @@ trusted as authorization.
   policies, bundles, telemetry metadata and audit records.
 - Redis is non-authoritative and supports queues, rate limiting, idempotency,
   caching and outbox delivery coordination.
-- Large collector uploads belong in object storage; MongoDB stores metadata and
-  a content hash.
+- Raw collector packages belong in transient object storage, deleted when
+  their analysis finishes; MongoDB stores metadata and a content hash.
+  Repository source is never persisted (ADR-0006).
 - Signing uses Ed25519. The private key comes from a secret manager or
   deployment secret and is never stored in MongoDB.
 - External AI access is hidden behind a provider-independent interface with
@@ -169,6 +171,17 @@ Exit criteria: an authorized proxy receives only its tenants' signed bundles;
 tampering and unsupported formats are rejected during manual compatibility
 verification with the proxy repository.
 
+Decision: bundles use `tessera.bundle/v1`, Ed25519 signatures over RFC 8785
+canonical bytes, and required `Tessera-Bundle-Schemas` /
+`Tessera-Tool-Registries` request headers (406 when the active bundle is not
+acceptable). Activation builds and signs the bundle transactionally; runtime
+configuration edits stay pending until re-activation. See ADR-0005.
+
+Status: the control-plane side is implemented and manually verified. Manual
+compatibility verification against the proxy remains open because the proxy
+does not yet implement bundle verification, and the contracts still live in
+`src/contracts` rather than `@tessera/contracts` (ADR-0004).
+
 ### Phase 5 — collector and application analysis
 
 - Accept versioned, redacted uploads with source revision and a visible upload
@@ -180,6 +193,17 @@ verification with the proxy repository.
 
 Exit criteria: duplicate uploads are idempotent; unredacted secrets are
 rejected where detectable; analysis failure cannot alter the active policy.
+
+Decision: collectors upload only the commit SHA and redacted environment
+results. Source is fetched from the project's bound repository through a
+GitHub App, filtered and redacted in memory, and listed in a visible source
+manifest. Raw packages are deleted after analysis, transient storage is the
+local filesystem, and AI analysis uses the Claude API behind a
+provider-independent interface. See ADR-0006.
+
+Status: implemented and manually verified with stubbed GitHub and AI network
+calls. A live GitHub App installation and a real Claude call have not been
+exercised yet.
 
 ### Phase 6 — policy generation and editing
 
@@ -225,13 +249,14 @@ only after an explicit project decision changes this policy.
 3. Exact JEV API contract.
 4. Runtime configuration requires an explicit `failureBehavior` value when a
    proxy has neither a valid remote bundle nor a last known good bundle. See
-   ADR-0002; the wire-level behavior remains a Phase 4 contract decision.
+   ADR-0002; its wire representation is defined by ADR-0005.
 5. Runtime configuration uses the required key `unknownEndpointBehavior`. See
    ADR-0002.
 6. Tool-registry compatibility for Phase 3 is defined by ADR-0004. Supported
-   bundle schemas and delayed proxy upgrade compatibility remain a required
-   Phase 4 decision.
-7. Collector upload size, file allowlist, retention and data residency.
+   bundle schemas and delayed proxy upgrade compatibility are defined by
+   ADR-0005.
+7. Collector upload contents, file allowlist, retention and storage are
+   defined by ADR-0006. Data residency for AI processing is not yet decided.
 
 These decisions must be recorded as ADRs before the dependent module is
 implemented.

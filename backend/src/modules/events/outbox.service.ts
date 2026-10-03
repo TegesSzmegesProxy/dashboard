@@ -2,18 +2,22 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ClientSession, ObjectId } from 'mongodb';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
 
-export type PolicyEventType =
+export type OutboxEventType =
   | 'PolicyImported'
   | 'PolicyCompiled'
   | 'PolicyCompilationFailed'
   | 'PolicyApproved'
   | 'PolicyRejected'
-  | 'PolicyActivated';
+  | 'PolicyActivated'
+  | 'BundleActivated'
+  | 'AnalysisRequested'
+  | 'AnalysisCompleted'
+  | 'AnalysisFailed';
 
 interface OutboxEventDocument {
   _id: ObjectId;
   eventId: string;
-  eventType: PolicyEventType;
+  eventType: OutboxEventType;
   version: 1;
   organizationId: ObjectId;
   tenantId: ObjectId;
@@ -34,8 +38,8 @@ export class OutboxService implements OnModuleInit {
     ]);
   }
 
-  async appendPolicyEvent(
-    eventType: PolicyEventType,
+  async append(
+    eventType: OutboxEventType,
     organizationId: ObjectId,
     tenantId: ObjectId,
     aggregateId: string,

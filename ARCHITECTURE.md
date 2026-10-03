@@ -16,8 +16,9 @@ deployed proxy in the sibling `../proxy` repository.
 Dashboard user -> Frontend -> Control-plane API -> MongoDB / Redis / object storage
                                     ^       |
                                     |       +-> AI provider (analysis/generation)
+                                    |       +-> GitHub (App, read-only source fetch)
                                     |
-Collector (customer CI/CLI) --------+  redacted analysis upload
+Collector (customer CI/CLI) --------+  commit SHA + redacted environment results
                                     |
 Proxy (customer environment) -------+  bundle pull, heartbeat, redacted telemetry
 
@@ -26,7 +27,8 @@ Client traffic -> Proxy -> protected application
 ```
 
 The proxy and collector initiate outbound HTTPS requests. The control plane
-never connects into a customer's network. A control-plane outage must not
+never connects into a customer's network. Its only outbound call for source
+is to GitHub, through a GitHub App installation that the customer linked. A control-plane outage must not
 interrupt a proxy that already has a verified bundle.
 
 ## Trust boundaries and API surfaces
@@ -36,7 +38,7 @@ The backend exposes three logically separate surfaces:
 | Surface | Principal | Responsibilities |
 | --- | --- | --- |
 | Dashboard API | user session/access token | organizations, projects, keys, analyses, policy lifecycle, operations views |
-| Collector API | collector key | versioned, redacted analysis uploads for assigned tenants |
+| Collector API | collector key | versioned analysis uploads (commit SHA and redacted environment results, no files) for assigned tenants |
 | Proxy API | deployment key | signed bundle pull, heartbeat/version state, redacted telemetry |
 
 Authenticate and authorize each surface independently. Keys are scoped to an
@@ -46,7 +48,8 @@ safe metadata; reveal plaintext once at creation.
 ## Control-plane workflow
 
 ```text
-redacted upload
+collector upload (commit SHA + environment results)
+  -> source fetch from the bound repository, filtering and redaction
   -> application analysis
   -> policy generation or human import/edit
   -> schema validation
@@ -76,15 +79,24 @@ contract, tool identifiers, and tool configs before persisting or using the
 bundle. Secrets never belong in a bundle. Cross-repository contract evolution
 must account for proxies upgrading later than the hosted control plane.
 
+The current schema is `tessera.bundle/v1` (ADR-0005). Proxies pull it from
+`GET /api/v1/tenants/:tenantId/active-bundle` with a deployment key, declare
+the bundle schemas and tool registries they support in request headers, and
+poll with `If-None-Match`. They report loaded versions to
+`POST /api/v1/proxy/heartbeats`, so the dashboard can show `restart required`
+and incompatible proxies. Heartbeats never affect distribution.
+
 ## Data and infrastructure
 
 - MongoDB is authoritative for organization- and tenant-owned state.
 - Redis supports queues, rate limits, idempotency, caching, and outbox delivery
   coordination. Losing Redis must not corrupt durable state.
-- Large analysis uploads belong in object storage; MongoDB stores metadata,
-  provenance, redaction manifest, and content hash.
-- Signing keys and provider credentials come from deployment secrets or a
-  secret manager, never the database or frontend.
+- Raw collector packages live in transient object storage and are deleted
+  when their analysis finishes. Fetched source exists only in worker memory.
+  MongoDB stores upload metadata, the source manifest (retained files,
+  exclusions, redaction counts) and the derived analysis (ADR-0006).
+- Signing keys, the GitHub App private key and provider credentials come from
+  deployment secrets or a secret manager, never the database or frontend.
 - Telemetry is best-effort and redacted. It must not affect bundle distribution
   or runtime decisions.
 

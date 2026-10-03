@@ -15,7 +15,11 @@ import { isDuplicateKey, objectId } from '../../common/mongodb.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { CreateTenantDto, UpdateTenantDto } from './project.dto.js';
-import { TenantDocument, TenantView } from './project.types.js';
+import {
+  TenantDocument,
+  TenantRuntimeConfiguration,
+  TenantView,
+} from './project.types.js';
 
 @Injectable()
 export class ProjectsService implements OnModuleInit {
@@ -111,6 +115,20 @@ export class ProjectsService implements OnModuleInit {
     tenantIds: string[],
     session?: ClientSession,
   ): Promise<void> {
+    if (
+      !(await this.allBelongToOrganization(organizationId, tenantIds, session))
+    ) {
+      throw new BadRequestException(
+        'Every assigned tenant must belong to the organization',
+      );
+    }
+  }
+
+  async allBelongToOrganization(
+    organizationId: string,
+    tenantIds: string[],
+    session?: ClientSession,
+  ): Promise<boolean> {
     const organizationObjectId = objectId(organizationId);
     const uniqueTenantIds = [...new Set(tenantIds)];
     const count = await this.collection.countDocuments(
@@ -120,11 +138,19 @@ export class ProjectsService implements OnModuleInit {
       },
       { session },
     );
-    if (count !== uniqueTenantIds.length) {
-      throw new BadRequestException(
-        'Every assigned tenant must belong to the organization',
-      );
-    }
+    return count === uniqueTenantIds.length;
+  }
+
+  async findRuntimeConfiguration(
+    organizationId: ObjectId,
+    tenantId: ObjectId,
+    session?: ClientSession,
+  ): Promise<TenantRuntimeConfiguration | null> {
+    const tenant = await this.collection.findOne(
+      { _id: tenantId, organizationId },
+      { session, projection: { runtimeConfiguration: 1 } },
+    );
+    return tenant?.runtimeConfiguration ?? null;
   }
 
   async update(

@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "description": "A repository for dashboard frontend and dashboard backend.",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "backend:docker": "docker compose -f backend/docker-compose.yml --profile app up --build",
+    "backend:docker:detach": "docker compose -f backend/docker-compose.yml --profile app up --build -d --wait",
+    "backend:docker:down": "docker compose -f backend/docker-compose.yml --profile app down"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/TegesSzmegesProxy/dashboard.git"
