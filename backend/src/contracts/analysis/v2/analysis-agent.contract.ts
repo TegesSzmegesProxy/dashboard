@@ -29,7 +29,7 @@ import { TOOL_IDS } from '../../tools/v2/tool-registry.js';
 import type { ToolId } from '../../tools/v2/tool-registry.js';
 
 /**
- * `tessera.analysis/v2` agent submissions (ADR-0009). The JSON schemas below
+ * `tessera.analysis/v2` agent submissions (ADR-0013). The JSON schemas below
  * are the strict `submit_*` tool inputs; strict schemas cannot express
  * lengths, so the DTOs re-validate every submission as untrusted input.
  */

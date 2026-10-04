@@ -1,0 +1,10 @@
+:root{
+--font-sans:'Geist',ui-sans-serif,system-ui,sans-serif;
+--font-mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+--font-pixel:'Silkscreen','JetBrains Mono',monospace;
+--fw-light:300;/* @kind other */--fw-regular:400;/* @kind other */--fw-medium:500;/* @kind other */--fw-semibold:600;/* @kind other */
+/* Scale (px) */
+--fs-display-xl:88px;--fs-display:64px;--fs-h1:44px;--fs-h2:32px;--fs-h3:22px;--fs-lead:19px;--fs-body:16px;--fs-small:14px;--fs-caption:12px;--fs-micro:11px;
+--lh-tight:1.04;/* @kind other */--lh-snug:1.18;/* @kind other */--lh-normal:1.5;/* @kind other */--lh-code:1.65;/* @kind other */
+--ls-display:-0.035em;/* @kind other */--ls-heading:-0.02em;/* @kind other */--ls-body:-0.005em;/* @kind other */--ls-label:0.08em;/* @kind other */--ls-pixel:0.04em;/* @kind other */
+}

@@ -7,6 +7,8 @@ import {
   IsNotEmpty,
   IsNumber,
   IsString,
+  IsBoolean,
+  IsDefined,
   IsUrl,
   Matches,
   Max,
@@ -27,7 +29,7 @@ export class TenantParamsDto extends OrganizationParamsDto {
 export class RoutingConfigurationDto {
   @ApiProperty({ example: '/' })
   @IsString()
-  @Matches(/^\/(?:[^?#]*)$/)
+  @Matches(/^\/(?!.*[?#\s]).*$/)
   @MaxLength(512)
   pathPrefix!: string;
 }
@@ -44,6 +46,64 @@ export class RuntimeThresholdsDto {
   @Min(0)
   @Max(104857600)
   maxRequestBodyBytes!: number;
+}
+
+export class DecisionSamplingDto {
+  @ApiProperty({ minimum: 0, maximum: 1 })
+  @IsNumber({ allowInfinity: false, allowNaN: false })
+  @Min(0)
+  @Max(1)
+  minN!: number;
+
+  @ApiProperty({ minimum: 0, maximum: 1 })
+  @IsNumber({ allowInfinity: false, allowNaN: false })
+  @Min(0)
+  @Max(1)
+  maxN!: number;
+}
+
+export class JevDecisionDto {
+  @ApiProperty({ minimum: 0, maximum: 1 })
+  @IsNumber({ allowInfinity: false, allowNaN: false })
+  @Min(0)
+  @Max(1)
+  attackProbabilityThreshold!: number;
+
+  @ApiProperty({ minimum: 0, maximum: 1 })
+  @IsNumber({ allowInfinity: false, allowNaN: false })
+  @Min(0)
+  @Max(1)
+  attackProbabilityFloor!: number;
+
+  @ApiProperty()
+  @IsBoolean()
+  locked!: boolean;
+}
+
+export class RuntimeDecisionDto {
+  @ApiProperty({ type: DecisionSamplingDto })
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => DecisionSamplingDto)
+  sampling!: DecisionSamplingDto;
+
+  @ApiProperty({ type: JevDecisionDto })
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => JevDecisionDto)
+  jev!: JevDecisionDto;
+
+  @ApiProperty({ enum: RUNTIME_BEHAVIORS })
+  @IsIn(RUNTIME_BEHAVIORS)
+  onStaticAnalysisError!: RuntimeBehavior;
+
+  @ApiProperty({ enum: RUNTIME_BEHAVIORS })
+  @IsIn(RUNTIME_BEHAVIORS)
+  onSuspiciousJevUnavailable!: RuntimeBehavior;
+
+  @ApiProperty({ enum: RUNTIME_BEHAVIORS })
+  @IsIn(RUNTIME_BEHAVIORS)
+  onSampledJevUnavailable!: RuntimeBehavior;
 }
 
 export class TenantRuntimeConfigurationDto {
@@ -74,6 +134,12 @@ export class TenantRuntimeConfigurationDto {
   @Min(0)
   @Max(1)
   samplingRate!: number;
+
+  @ApiProperty({ type: RuntimeDecisionDto })
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => RuntimeDecisionDto)
+  decision!: RuntimeDecisionDto;
 }
 
 export class CreateTenantDto {

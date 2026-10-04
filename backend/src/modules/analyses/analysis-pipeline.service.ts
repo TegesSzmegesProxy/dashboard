@@ -39,8 +39,8 @@ import type {
   RepoIndexSummary,
   RouteCandidate,
 } from '../../repo-host/protocol.js';
-import { AiCredentialsService } from '../ai-credentials/ai-credentials.service.js';
-import { AiCredentialError } from '../ai-credentials/ai-credential.types.js';
+import { AiCredentialError } from '../integrations/ai-model-credential.errors.js';
+import { AiModelCredentialService } from '../integrations/ai-model-credential.service.js';
 import {
   ENVIRONMENT_MISSING_NOTICE,
   EnvironmentSnapshotDocument,
@@ -161,7 +161,7 @@ interface RunContext {
 }
 
 /**
- * Sandboxed agentic analysis (ADR-0009). `estimate` fetches and indexes the
+ * Sandboxed agentic analysis (ADR-0013). `estimate` fetches and indexes the
  * repository without any model call; `analyze` spends an approved budget on
  * recon, endpoint workers and the sweep, then reconciles the results.
  */
@@ -179,7 +179,7 @@ export class AnalysisPipeline {
     private readonly github: GitHubAppClient,
     private readonly sandbox: RepoSandbox,
     private readonly snapshots: EnvironmentSnapshotsService,
-    private readonly credentials: AiCredentialsService,
+    private readonly credentials: AiModelCredentialService,
     config: ConfigService<Environment, true>,
   ) {
     this.prices = new PriceTable(config.get('AI_PRICE_TABLE', { infer: true }));
@@ -405,9 +405,8 @@ export class AnalysisPipeline {
       'route_like_files',
       { limit: 2_000 },
     );
-    const credential = await this.credentials.view(
-      job.organizationId.toHexString(),
-      'anthropic',
+    const aiCredentialConfigured = await this.credentials.hasAnthropicKey(
+      job.organizationId,
     );
     const estimate = estimateAnalysis(
       {
@@ -422,7 +421,7 @@ export class AnalysisPipeline {
           .filter((bytes) => bytes > 0),
         routeLikeFiles: routeLike.length,
         maxWorkItems: this.maxWorkItems,
-        aiCredentialConfigured: credential.configured,
+        aiCredentialConfigured,
       },
       this.prices,
     );
@@ -438,7 +437,7 @@ export class AnalysisPipeline {
     );
     const autoApprove =
       autoCeiling !== null &&
-      credential.configured &&
+      aiCredentialConfigured &&
       autoCeiling >= estimate.suggestedCeilingUsd;
     await this.analyses.updateLeased(job._id, leaseOwner, {
       index: summary,
@@ -475,7 +474,7 @@ export class AnalysisPipeline {
 
     let apiKey: string;
     try {
-      apiKey = await this.credentials.resolve(job.organizationId, 'anthropic');
+      apiKey = await this.credentials.resolveAnthropicKey(job.organizationId);
     } catch (error) {
       if (error instanceof AiCredentialError && error.retryable) {
         throw new PhaseStop({ kind: 'retry', errorCode: error.code });

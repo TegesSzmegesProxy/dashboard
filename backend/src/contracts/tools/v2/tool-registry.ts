@@ -2,7 +2,7 @@
  * `tessera.tools/v2`: exactly the tools the proxy implements
  * (`source/core/static-analysis/tools` in the proxy repository), with the
  * proxy's identifiers and context types. Tools carry no configuration yet;
- * the proxy hard-codes their limits (ADR-0010).
+ * the proxy hard-codes their limits (ADR-0014).
  *
  * This module is the single source for the compiler, the JSON schemas given
  * to the model and the tool documentation in the analysis prompts.

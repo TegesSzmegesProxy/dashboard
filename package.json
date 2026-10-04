@@ -6,7 +6,9 @@
   "scripts": {
     "backend:docker": "docker compose -f backend/docker-compose.yml --profile app up --build",
     "backend:docker:detach": "docker compose -f backend/docker-compose.yml --profile app up --build -d --wait",
-    "backend:docker:down": "docker compose -f backend/docker-compose.yml --profile app down"
+    "backend:docker:down": "docker compose -f backend/docker-compose.yml --profile app down",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build"
   },
   "repository": {
     "type": "git",

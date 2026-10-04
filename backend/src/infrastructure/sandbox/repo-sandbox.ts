@@ -47,7 +47,7 @@ export interface SandboxCommand {
   env: NodeJS.ProcessEnv;
 }
 
-/** One running `repo-host` for one analysis job (ADR-0009). */
+/** One running `repo-host` for one analysis job (ADR-0013). */
 export class RepoSandboxSession {
   private readonly pending = new Map<
     number,
@@ -259,7 +259,7 @@ export class DockerRepoSandbox extends RepoSandbox {
 
 /**
  * Development only: `repo-host` as a plain child process. It gets an empty
- * environment, but no isolation; refused in production (ADR-0009).
+ * environment, but no isolation; refused in production (ADR-0013).
  */
 export class LocalProcessRepoSandbox extends RepoSandbox {
   readonly isConfigured = true;

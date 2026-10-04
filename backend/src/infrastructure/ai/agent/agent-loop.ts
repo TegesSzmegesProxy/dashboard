@@ -78,7 +78,7 @@ function isFatal(error: unknown): boolean {
 const LOOP_TURNS = 3;
 
 /**
- * Manual tool-use loop for one bounded task (ADR-0009). The history is
+ * Manual tool-use loop for one bounded task (ADR-0013). The history is
  * append-only, the task ends only through a strict `submit_*` tool, and
  * every limit is enforced here, outside the model.
  */

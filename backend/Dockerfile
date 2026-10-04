@@ -18,7 +18,7 @@ USER node
 EXPOSE 5000
 CMD ["node", "dist/main.js"]
 
-# Analysis sandbox image (ADR-0009): `docker build --target repo-host -t
+# Analysis sandbox image (ADR-0013): `docker build --target repo-host -t
 # tessera-repo-host .`. The worker runs it with no network, a read-only root
 # filesystem and an unprivileged user; it never receives credentials.
 FROM runtime AS repo-host

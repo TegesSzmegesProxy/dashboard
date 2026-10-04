@@ -79,7 +79,7 @@ export class AnalysesController {
     );
   }
 
-  /** Approves the spending ceiling after reviewing the estimate (ADR-0011). */
+  /** Approves the spending ceiling after reviewing the estimate (ADR-0015). */
   @Post('analyses/:analysisId/budget-approval')
   @HttpCode(HttpStatus.ACCEPTED)
   @RequireOrganizationRoles('owner', 'admin')

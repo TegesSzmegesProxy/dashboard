@@ -74,6 +74,10 @@
 - **Active bundle**: the signed, immutable unit distributed to a proxy. It
   combines one tenant's runtime configuration and compiled policy under one
   version.
+- **Runtime decision settings**: the tenant's explicit sampling bounds, JEV
+  threshold and floor, and separate actions for static-analysis errors and
+  unavailable JEV. They travel in bundle v2; `failureBehavior` alone does not
+  define them.
 - **Active version**: the bundle selected by the control plane for distribution.
   It can differ from the version currently loaded by a running proxy.
 - **Loaded version**: the verified bundle currently used by a proxy process.
@@ -93,6 +97,21 @@
   activation.
 - **JEV**: an external classification model used by the proxy for selected
   runtime decisions. It is not the model used to generate or edit policies.
+- **JEV credential**: the organization's write-only JEV API key, stored
+  encrypted and pulled by proxies with the `jev-credentials:read` deployment
+  scope. It is never part of a bundle.
+- **AI model credential**: the organization's write-only default AI provider
+  and API key, stored encrypted in the control plane. It is never sent to
+  proxies or included in a bundle.
+- **Tuning settings**: a project's stored model settings, policy defaults and
+  endpoint overrides. They are inputs only: saving them creates no policy
+  version and changes no bundle (ADR-0011).
+- **Model settings**: a project's context length (most recent requests given
+  to the model) and sampling parameters (`temperature`, `topP`, `maxTokens`).
+- **Policy defaults**: a project's default policy action (`allow`, `review`,
+  `block`), free-text constraints and trigger threshold for every endpoint.
+- **Endpoint override**: a per-endpoint (method and path) request policy,
+  threshold and per-field rules that take precedence over the policy defaults.
 - **Telemetry**: best-effort redacted proxy health and aggregate decision data.
   It excludes raw request bodies, field values, authorization headers, and
   cookies.

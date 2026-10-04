@@ -1,6 +1,6 @@
 /**
  * Wire protocol between the analysis worker and `repo-host`, the process that
- * runs inside the per-job sandbox (ADR-0009). Newline-delimited JSON over
+ * runs inside the per-job sandbox (ADR-0013). Newline-delimited JSON over
  * stdin/stdout; stderr carries only operational logs without content.
  *
  * The repository archive is streamed in with `archive.chunk` requests, so the

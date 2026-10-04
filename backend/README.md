@@ -65,9 +65,39 @@ Proxies use deployment keys to call
 `Tessera-Bundle-Schemas` and `Tessera-Tool-Registries` headers and optional
 `If-None-Match`. They report status to `POST /api/v1/proxy/heartbeats`.
 
+### JEV credential
+
+Owners and admins set the organization's JEV API key with
+`PUT /api/v1/organizations/:organizationId/integrations/jev` (`apiKey`),
+read its status with `GET` and disconnect it with `DELETE`. The key is
+encrypted with `CREDENTIAL_ENCRYPTION_KEY` (`openssl rand -base64 32`) and
+never returned to the dashboard; without that variable saving returns `503`.
+Proxies fetch it from `GET /api/v1/proxy/jev-credential` with a deployment
+key that has the opt-in `jev-credentials:read` scope; `404` means no
+credential is configured. See ADR-0009.
+
+### AI model credential
+
+Owners and admins set the organization's default AI model key with
+`PUT /api/v1/organizations/:organizationId/integrations/ai-model`
+(`provider`: `openai` | `anthropic` | `custom`, `apiKey`), read its status
+with `GET` and disconnect it with `DELETE`. It is stored like the JEV
+credential and never returned. Analyses use it (ADR-0015; `anthropic` only, no
+fallback to the platform key); policy generation does not yet. See ADR-0010.
+
+### Project tuning settings
+
+Owners and admins replace a project's model settings, policy defaults and
+endpoint overrides with `PUT` on
+`/api/v1/organizations/:organizationId/projects/:tenantId/model-settings`,
+`.../policy-defaults` and `.../endpoint-overrides`; viewers may `GET` them.
+Unsaved sections return `null` values (or no endpoints); there are no
+defaults. Constraints containing a detectable credential are rejected with
+`422`. Saving changes no policy version or bundle. See ADR-0011.
+
 ### Application analysis
 
-Analyses are agentic and sandboxed (ADR-0009 to ADR-0012):
+Analyses are agentic and sandboxed (ADR-0013 to ADR-0016):
 
 1. Collectors send `POST /api/v1/tenants/:tenantId/analysis-uploads` with a
    collector key, an `Idempotency-Key`, and a `tessera.analysis-upload/v1`
@@ -83,9 +113,10 @@ Analyses are agentic and sandboxed (ADR-0009 to ADR-0012):
    per-job sandbox (`ANALYSIS_SANDBOX`) that indexes it for any language,
    without network access or credentials. It then estimates the cost and
    waits in `awaiting_budget`.
-4. An owner or admin stores the organization's Anthropic key
-   (`PUT /api/v1/organizations/:organizationId/ai-credentials/anthropic`,
-   requires `SECRET_STORE`) and approves a ceiling with
+4. An owner or admin connects the organization's Anthropic key
+   (`PUT /api/v1/organizations/:organizationId/integrations/ai-model` with
+   `provider: anthropic`; needs `CREDENTIAL_ENCRYPTION_KEY`, see ADR-0010) and
+   approves a ceiling with
    `POST .../analyses/:analysisId/budget-approval` (`ceilingUsd`,
    `Idempotency-Key`). `PUT .../projects/:tenantId/analysis-settings` can set
    an explicit auto-approve ceiling.

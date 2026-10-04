@@ -37,7 +37,7 @@ class SnapshotParamsDto extends TenantParamsDto {
   snapshotId!: string;
 }
 
-/** Target of `tessera -get-environment` (ADR-0012). */
+/** Target of `tessera -get-environment` (ADR-0016). */
 @ApiTags('collector')
 @ApiBearerAuth()
 @Controller('tenants/:tenantId/environment-snapshots')

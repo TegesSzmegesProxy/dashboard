@@ -38,7 +38,7 @@ interface HeuristicPattern {
 
 /**
  * Language-neutral route shapes. They only seed recon and the sweep: a hit
- * becomes a work item only when a stronger source confirms it (ADR-0009).
+ * becomes a work item only when a stronger source confirms it (ADR-0013).
  */
 const HEURISTICS: HeuristicPattern[] = [
   {

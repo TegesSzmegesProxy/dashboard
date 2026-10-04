@@ -163,7 +163,7 @@ export function sanitizeLine(line: string): string {
     : escaped;
 }
 
-/** Records exactly what reaches the AI provider (ADR-0009). */
+/** Records exactly what reaches the AI provider (ADR-0013). */
 export class ReadManifestRecorder {
   private readonly files = new Map<
     string,

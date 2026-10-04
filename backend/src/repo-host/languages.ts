@@ -3,7 +3,7 @@ import { posix } from 'node:path';
 /**
  * Extension → language. Languages with a bundled tree-sitter grammar get
  * tier 1 (symbols, definitions); every other text file is still tier 0
- * (listing, reading, search) so analysis works for any language (ADR-0009).
+ * (listing, reading, search) so analysis works for any language (ADR-0013).
  */
 interface LanguageSpec {
   language: string;

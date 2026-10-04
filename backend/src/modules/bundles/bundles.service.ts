@@ -9,13 +9,16 @@ import { ClientSession, ObjectId } from 'mongodb';
 import { canonicalJson, JsonValue } from '../../common/canonical-json.js';
 import { objectId } from '../../common/mongodb.js';
 import {
-  ActiveBundleV1Payload,
-  BUNDLE_SCHEMA_VERSION,
   BundlePolicyV1,
-  BundleRuntimeConfigV1,
   SignedActiveBundleV1,
   SUPPORTED_BUNDLE_SCHEMAS,
 } from '../../contracts/bundle/v1/bundle.contract.js';
+import {
+  BUNDLE_SCHEMA_VERSION_V2 as BUNDLE_SCHEMA_VERSION,
+  type ActiveBundleV2Payload,
+  type BundleRuntimeConfigV2,
+  type SignedActiveBundleV2,
+} from '../../contracts/bundle/v2/bundle.contract.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
 import type { MachinePrincipal } from '../api-keys/api-key.types.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -121,7 +124,7 @@ export class BundlesService implements OnModuleInit {
       { session },
     );
     if (!bundle) {
-      const payload: ActiveBundleV1Payload = {
+      const payload: ActiveBundleV2Payload = {
         ...content,
         version,
         issuedAt: now.toISOString(),
@@ -189,7 +192,7 @@ export class BundlesService implements OnModuleInit {
     principal: MachinePrincipal,
     tenantId: string,
     compatibility: ProxyCompatibility,
-  ): Promise<SignedActiveBundleV1> {
+  ): Promise<SignedActiveBundleV1 | SignedActiveBundleV2> {
     const organizationObjectId = objectId(principal.organizationId);
     const tenantObjectId = objectId(tenantId);
     // A deleted tenant must not keep serving its last bundle.
@@ -269,7 +272,7 @@ export class BundlesService implements OnModuleInit {
     if (!bundle) return null;
     const payload = JSON.parse(
       bundle.canonicalPayload,
-    ) as ActiveBundleV1Payload;
+    ) as ActiveBundleV2Payload;
     const endpoints: ReadonlySet<string> = new Set(
       payload.policy.endpoints.map(
         (endpoint) => `${endpoint.method} ${endpoint.path}`,
@@ -302,10 +305,12 @@ export class BundlesService implements OnModuleInit {
     return { pointer, bundle };
   }
 
-  private toWire(bundle: BundleDocument): SignedActiveBundleV1 {
+  private toWire(
+    bundle: BundleDocument,
+  ): SignedActiveBundleV1 | SignedActiveBundleV2 {
     const payload = JSON.parse(
       bundle.canonicalPayload,
-    ) as ActiveBundleV1Payload;
+    ) as ActiveBundleV2Payload;
     return { ...payload, signature: bundle.signature };
   }
 
@@ -327,7 +332,12 @@ export class BundlesService implements OnModuleInit {
   /** Explicit field mapping keeps unexpected stored fields out of bundles. */
   private toBundleRuntimeConfig(
     configuration: TenantRuntimeConfiguration,
-  ): BundleRuntimeConfigV1 {
+  ): BundleRuntimeConfigV2 {
+    if (!configuration.decision) {
+      throw new Error(
+        'Tenant decision settings must be configured before activation',
+      );
+    }
     return {
       upstreamUrl: configuration.upstreamUrl,
       failureBehavior: configuration.failureBehavior,
@@ -338,6 +348,7 @@ export class BundlesService implements OnModuleInit {
         maxRequestBodyBytes: configuration.thresholds.maxRequestBodyBytes,
       },
       samplingRate: configuration.samplingRate,
+      decision: configuration.decision,
     };
   }
 

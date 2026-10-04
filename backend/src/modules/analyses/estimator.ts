@@ -48,7 +48,7 @@ export interface EstimateInput {
 }
 
 /**
- * Index-only cost estimate (ADR-0011). It models each agent run as a
+ * Index-only cost estimate (ADR-0015). It models each agent run as a
  * conversation whose prefix is read from cache every turn and whose
  * transcript grows with what the agent reads. Calibrate with recorded usage.
  */

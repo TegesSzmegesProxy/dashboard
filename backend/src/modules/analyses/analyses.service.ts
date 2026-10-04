@@ -17,9 +17,9 @@ import { isDuplicateKey, objectId } from '../../common/mongodb.js';
 import { ANALYSIS_SCHEMA_V2 } from '../../contracts/analysis/v2/analysis-agent.contract.js';
 import { EMPTY_USAGE } from '../../infrastructure/ai/pricing.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
-import { AiCredentialsService } from '../ai-credentials/ai-credentials.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { OutboxService } from '../events/outbox.service.js';
+import { AiModelCredentialService } from '../integrations/ai-model-credential.service.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import type {
   AnalysisDocument,
@@ -50,7 +50,7 @@ export class AnalysesService implements OnModuleInit {
     private readonly outbox: OutboxService,
     private readonly audit: AuditService,
     private readonly projects: ProjectsService,
-    private readonly credentials: AiCredentialsService,
+    private readonly credentials: AiModelCredentialService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -214,7 +214,7 @@ export class AnalysesService implements OnModuleInit {
     };
   }
 
-  /** Approves a spending ceiling and queues the model phase (ADR-0011). */
+  /** Approves a spending ceiling and queues the model phase (ADR-0015). */
   async approveBudget(
     organizationId: string,
     tenantId: string,
@@ -243,10 +243,9 @@ export class AnalysesService implements OnModuleInit {
         `The ceiling must be above 0 and at most ${MAX_CEILING_USD} USD`,
       );
     }
-    const credential = await this.credentials.view(organizationId, 'anthropic');
-    if (!credential.configured) {
+    if (!(await this.credentials.hasAnthropicKey(document.organizationId))) {
       throw new ConflictException(
-        'Add the organization Anthropic API key before approving a budget',
+        'Connect an Anthropic API key for the organization before approving a budget',
       );
     }
     const now = new Date();

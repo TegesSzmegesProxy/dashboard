@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { GitHubModule } from '../../infrastructure/github/github.module.js';
 import { SandboxModule } from '../../infrastructure/sandbox/sandbox.module.js';
-import { AiCredentialsModule } from '../ai-credentials/ai-credentials.module.js';
 import { AuditModule } from '../audit/audit.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { EnvironmentSnapshotsModule } from '../environment-snapshots/environment-snapshots.module.js';
 import { EventsModule } from '../events/events.module.js';
+import { IntegrationsModule } from '../integrations/integrations.module.js';
 import { OrganizationsModule } from '../organizations/organizations.module.js';
 import { ProjectsModule } from '../projects/projects.module.js';
 import { SourceRepositoriesModule } from '../source-repositories/source-repositories.module.js';
@@ -16,12 +16,12 @@ import { AnalysisWorker } from './analysis-worker.service.js';
 
 @Module({
   imports: [
-    AiCredentialsModule,
     AuditModule,
     AuthModule,
     EnvironmentSnapshotsModule,
     EventsModule,
     GitHubModule,
+    IntegrationsModule,
     OrganizationsModule,
     ProjectsModule,
     SandboxModule,

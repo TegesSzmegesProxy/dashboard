@@ -581,9 +581,9 @@ paths:
         - bearer: []
       tags:
         - source repositories
-  /api/v1/organizations/{organizationId}/ai-credentials/anthropic:
+  /api/v1/organizations/{organizationId}/integrations/ai-model:
     get:
-      operationId: AiCredentialsController_get
+      operationId: AiModelCredentialController_get
       parameters: []
       responses:
         '200':
@@ -591,25 +591,25 @@ paths:
       security:
         - bearer: []
       tags:
-        - ai credentials
+        - integrations
     put:
-      operationId: AiCredentialsController_set
+      operationId: AiModelCredentialController_set
       parameters: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SetAiCredentialDto'
+              $ref: '#/components/schemas/PutAiModelCredentialDto'
       responses:
         '200':
           description: ''
       security:
         - bearer: []
       tags:
-        - ai credentials
+        - integrations
     delete:
-      operationId: AiCredentialsController_remove
+      operationId: AiModelCredentialController_remove
       parameters: []
       responses:
         '204':
@@ -617,7 +617,138 @@ paths:
       security:
         - bearer: []
       tags:
-        - ai credentials
+        - integrations
+  /api/v1/organizations/{organizationId}/integrations/jev:
+    get:
+      operationId: JevCredentialController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - integrations
+    put:
+      operationId: JevCredentialController_set
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutJevCredentialDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - integrations
+    delete:
+      operationId: JevCredentialController_remove
+      parameters: []
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - integrations
+  /api/v1/proxy/jev-credential:
+    get:
+      operationId: ProxyJevCredentialController_get
+      parameters: []
+      responses:
+        '200':
+          description: tessera.jev-credential/v1
+        '404':
+          description: The organization has no JEV credential
+      security:
+        - bearer: []
+      tags:
+        - proxy distribution
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/model-settings:
+    get:
+      operationId: TuningController_getModelSettings
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
+    put:
+      operationId: TuningController_setModelSettings
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutModelSettingsDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policy-defaults:
+    get:
+      operationId: TuningController_getPolicyDefaults
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
+    put:
+      operationId: TuningController_setPolicyDefaults
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutPolicyDefaultsDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/endpoint-overrides:
+    get:
+      operationId: TuningController_getEndpointOverrides
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
+    put:
+      operationId: TuningController_setEndpointOverrides
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutEndpointOverridesDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
   /api/v1/tenants/{tenantId}/environment-snapshots:
     post:
       operationId: CollectorEnvironmentSnapshotsController_receive
@@ -934,6 +1065,65 @@ components:
       required:
         - requestTimeoutMs
         - maxRequestBodyBytes
+    DecisionSamplingDto:
+      type: object
+      properties:
+        minN:
+          type: number
+          minimum: 0
+          maximum: 1
+        maxN:
+          type: number
+          minimum: 0
+          maximum: 1
+      required:
+        - minN
+        - maxN
+    JevDecisionDto:
+      type: object
+      properties:
+        attackProbabilityThreshold:
+          type: number
+          minimum: 0
+          maximum: 1
+        attackProbabilityFloor:
+          type: number
+          minimum: 0
+          maximum: 1
+        locked:
+          type: boolean
+      required:
+        - attackProbabilityThreshold
+        - attackProbabilityFloor
+        - locked
+    RuntimeDecisionDto:
+      type: object
+      properties:
+        sampling:
+          $ref: '#/components/schemas/DecisionSamplingDto'
+        jev:
+          $ref: '#/components/schemas/JevDecisionDto'
+        onStaticAnalysisError:
+          type: string
+          enum:
+            - allow
+            - block
+        onSuspiciousJevUnavailable:
+          type: string
+          enum:
+            - allow
+            - block
+        onSampledJevUnavailable:
+          type: string
+          enum:
+            - allow
+            - block
+      required:
+        - sampling
+        - jev
+        - onStaticAnalysisError
+        - onSuspiciousJevUnavailable
+        - onSampledJevUnavailable
     TenantRuntimeConfigurationDto:
       type: object
       properties:
@@ -958,6 +1148,8 @@ components:
           type: number
           minimum: 0
           maximum: 1
+        decision:
+          $ref: '#/components/schemas/RuntimeDecisionDto'
       required:
         - upstreamUrl
         - failureBehavior
@@ -965,6 +1157,7 @@ components:
         - routing
         - thresholds
         - samplingRate
+        - decision
     CreateTenantDto:
       type: object
       properties:
@@ -1012,6 +1205,7 @@ components:
               - bundles:read
               - heartbeats:write
               - telemetry:write
+              - jev-credentials:read
         allowedTenantIds:
           type: array
           items:
@@ -1372,14 +1566,159 @@ components:
         - installationId
         - owner
         - name
-    SetAiCredentialDto:
+    PutAiModelCredentialDto:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - custom
+        apiKey:
+          type: string
+          description: >-
+            AI model provider API key. Write-only: it is encrypted at rest and
+            never returned to the dashboard.
+          writeOnly: true
+      required:
+        - provider
+        - apiKey
+    PutJevCredentialDto:
       type: object
       properties:
         apiKey:
           type: string
-          description: Anthropic API key. Write-only; never returned.
+          description: >-
+            JEV API key. Write-only: it is encrypted at rest, never returned to
+            the dashboard, and delivered only to deployment keys with
+            jev-credentials:read.
+          writeOnly: true
       required:
         - apiKey
+    PutModelSettingsDto:
+      type: object
+      properties:
+        contextLength:
+          type: number
+          minimum: 1
+          maximum: 100
+          description: Number of most recent requests given to the model as context.
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+        topP:
+          type: number
+          minimum: 0
+          maximum: 1
+        maxTokens:
+          type: number
+          minimum: 1
+          maximum: 1000000
+          description: Per response.
+      required:
+        - contextLength
+        - temperature
+        - topP
+        - maxTokens
+    PutPolicyDefaultsDto:
+      type: object
+      properties:
+        defaultAction:
+          type: string
+          enum:
+            - allow
+            - review
+            - block
+        customConstraints:
+          type: string
+          maxLength: 2000
+          description: >-
+            Free-text constraints for every endpoint. May be empty; must not
+            contain credentials.
+        threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Score at which a policy is triggered.
+      required:
+        - defaultAction
+        - customConstraints
+        - threshold
+    FieldOverrideDto:
+      type: object
+      properties:
+        name:
+          type: string
+          example: card_number
+          maxLength: 256
+        rule:
+          type: string
+          enum:
+            - allow
+            - require
+            - mask
+            - review
+            - block
+        constraints:
+          type: string
+          maxLength: 2000
+          description: May be empty; must not contain credentials.
+      required:
+        - name
+        - rule
+        - constraints
+    EndpointOverrideDto:
+      type: object
+      properties:
+        method:
+          type: string
+          enum:
+            - DELETE
+            - GET
+            - HEAD
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+        path:
+          type: string
+          example: /v1/checkout
+        requestPolicy:
+          type: string
+          enum:
+            - allow
+            - review
+            - block
+          nullable: true
+          description: null uses the policy defaults.
+        threshold:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: null uses the policy defaults.
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldOverrideDto'
+      required:
+        - method
+        - path
+        - requestPolicy
+        - threshold
+        - fields
+    PutEndpointOverridesDto:
+      type: object
+      properties:
+        endpoints:
+          description: Replaces every override of the project. Empty clears them.
+          type: array
+          items:
+            $ref: '#/components/schemas/EndpointOverrideDto'
+      required:
+        - endpoints
     EnvironmentSnapshotV1Dto:
       type: object
       properties:

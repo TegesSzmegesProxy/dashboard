@@ -18,7 +18,8 @@ code and the existing `backend/` application.
 
 The sibling `../proxy` repository is useful for compatibility checks, but this
 repository must not import its implementation. Cross-repository data belongs
-in versioned wire contracts, ultimately published as `@tessera/contracts`.
+in versioned wire contracts kept in the proxy repository. Keep this backend's
+transport definitions compatible without importing proxy implementation.
 
 ## Non-negotiable boundaries
 
@@ -33,7 +34,7 @@ in versioned wire contracts, ultimately published as `@tessera/contracts`.
 - The collector redacts environment context before upload and never uploads
   source files. Source is fetched from the project's bound GitHub repository
   into a disposable, network-less analysis sandbox, and anything sent to the
-  AI provider is redacted first (ADR-0009). Never persist or log secrets, raw request bodies, authorization
+  AI provider is redacted first (ADR-0013). Never persist or log secrets, raw request bodies, authorization
   headers, cookies, or unredacted source.
 - Derive organization and tenant access from the authenticated user or API
   key. Never trust a client-provided `organizationId` or `tenantId` as
@@ -87,4 +88,3 @@ in versioned wire contracts, ultimately published as `@tessera/contracts`.
 - Update `ARCHITECTURE.md` when a system boundary or cross-deployable contract
   changes. Keep implementation status and phased work in the implementation
   plan instead of duplicating it here.
-

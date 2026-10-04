@@ -18,7 +18,7 @@ const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 60_000;
 
 /**
- * Durable analysis processing (ADR-0009). Each analysis is its own job,
+ * Durable analysis processing (ADR-0013). Each analysis is its own job,
  * claimed with a lease; terminal transitions commit with their outbox event.
  */
 @Injectable()

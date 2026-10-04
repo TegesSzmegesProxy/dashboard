@@ -2,7 +2,7 @@ import { UNTRUSTED_DATA_RULES } from './shared.js';
 
 /**
  * Recon: understand how this application is built and write route rules that
- * a deterministic engine applies to the whole repository (ADR-0009).
+ * a deterministic engine applies to the whole repository (ADR-0013).
  */
 export const RECON_SYSTEM_PROMPT = `You map a web application's HTTP surface so a security reverse proxy can protect it. You work through read-only tools over the application's repository. You run once per analysis; per-endpoint agents run after you and rely on what you produce.
 

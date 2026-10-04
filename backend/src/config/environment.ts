@@ -15,6 +15,7 @@ export interface Environment {
   MACHINE_AUTH_RATE_LIMIT_PER_MINUTE: number;
   MACHINE_AUTH_RATE_LIMIT_FAILURE_BEHAVIOR: 'allow' | 'deny';
   BUNDLE_SIGNING_PRIVATE_KEY: string;
+  CREDENTIAL_ENCRYPTION_KEY?: string;
   GITHUB_APP_ID?: string;
   GITHUB_APP_PRIVATE_KEY?: string;
   GITHUB_APP_CLIENT_ID?: string;
@@ -23,13 +24,6 @@ export interface Environment {
   ANTHROPIC_ANALYSIS_MODEL: string;
   ANTHROPIC_POLICY_MODEL: string;
   TELEMETRY_QUOTA_ENTRIES_PER_TENANT_HOUR: number;
-  SECRET_STORE?: 'vault' | 'local-dev';
-  VAULT_ADDR?: string;
-  VAULT_TOKEN?: string;
-  VAULT_KV_MOUNT: string;
-  VAULT_PATH_PREFIX: string;
-  LOCAL_SECRET_STORE_FILE: string;
-  LOCAL_SECRET_STORE_KEY?: string;
   ANALYSIS_SANDBOX?: 'docker' | 'local-process';
   ANALYSIS_SANDBOX_IMAGE: string;
   ANALYSIS_SANDBOX_RUNTIME: 'runsc' | 'runc';
@@ -71,6 +65,16 @@ export const environmentSchema = Joi.object<Environment>({
     .trim()
     .pattern(/-----BEGIN PRIVATE KEY-----/)
     .required(),
+  // 32 random bytes, base64. Without it integration credentials cannot be
+  // stored or delivered; there is no plaintext fallback.
+  CREDENTIAL_ENCRYPTION_KEY: Joi.string()
+    .empty('')
+    .base64()
+    .custom((value: string, helpers) =>
+      Buffer.from(value, 'base64').length === 32
+        ? value
+        : helpers.error('any.invalid'),
+    ),
   GITHUB_APP_ID: Joi.string().empty('').pattern(/^\d+$/),
   GITHUB_APP_PRIVATE_KEY: Joi.string()
     .empty('')
@@ -84,27 +88,7 @@ export const environmentSchema = Joi.object<Environment>({
     .integer()
     .min(1)
     .default(100_000),
-  // Customer AI keys (ADR-0011). Without a store keys cannot be saved and
-  // analyses stop before any model call.
-  SECRET_STORE: Joi.string().empty('').valid('vault', 'local-dev'),
-  VAULT_ADDR: Joi.string()
-    .empty('')
-    .uri({ scheme: ['https', 'http'] }),
-  VAULT_TOKEN: Joi.string().empty('').min(1),
-  VAULT_KV_MOUNT: Joi.string()
-    .trim()
-    .pattern(/^[\w-]+$/)
-    .default('secret'),
-  VAULT_PATH_PREFIX: Joi.string()
-    .trim()
-    .pattern(/^[\w/-]+$/)
-    .default('tessera'),
-  LOCAL_SECRET_STORE_FILE: Joi.string()
-    .trim()
-    .default('./var/local-secrets.json'),
-  // 32 random bytes, base64.
-  LOCAL_SECRET_STORE_KEY: Joi.string().empty('').base64(),
-  // Repository sandbox (ADR-0009). Without it analyses fail at source fetch.
+  // Repository sandbox (ADR-0013). Without it analyses fail at source fetch.
   ANALYSIS_SANDBOX: Joi.string().empty('').valid('docker', 'local-process'),
   ANALYSIS_SANDBOX_IMAGE: Joi.string()
     .trim()
@@ -152,18 +136,6 @@ export const environmentSchema = Joi.object<Environment>({
     'GITHUB_APP_PRIVATE_KEY',
     'GITHUB_APP_CLIENT_ID',
     'GITHUB_APP_CLIENT_SECRET',
-  )
-  .when(Joi.object({ SECRET_STORE: Joi.valid('vault').required() }).unknown(), {
-    then: Joi.object({
-      VAULT_ADDR: Joi.required(),
-      VAULT_TOKEN: Joi.required(),
-    }),
-  })
-  .when(
-    Joi.object({ SECRET_STORE: Joi.valid('local-dev').required() }).unknown(),
-    {
-      then: Joi.object({ LOCAL_SECRET_STORE_KEY: Joi.required() }),
-    },
   );
 
 /**

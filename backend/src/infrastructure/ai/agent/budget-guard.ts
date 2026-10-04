@@ -1,7 +1,7 @@
 import { addUsage, EMPTY_USAGE, PriceTable, TokenUsage } from '../pricing.js';
 
 /**
- * Enforced spend ceiling for one analysis (ADR-0011). Checked after every
+ * Enforced spend ceiling for one analysis (ADR-0015). Checked after every
  * model response; nothing a model says can raise it.
  */
 export class BudgetGuard {

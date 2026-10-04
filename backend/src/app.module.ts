@@ -3,7 +3,6 @@ import { ConfigModule } from '@nestjs/config';
 import { validateEnvironment } from './config/environment.js';
 import { DatabaseModule } from './infrastructure/database/database.module.js';
 import { RedisModule } from './infrastructure/redis/redis.module.js';
-import { AiCredentialsModule } from './modules/ai-credentials/ai-credentials.module.js';
 import { AnalysesModule } from './modules/analyses/analyses.module.js';
 import { AnalysisUploadsModule } from './modules/analysis-uploads/analysis-uploads.module.js';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module.js';
@@ -14,6 +13,7 @@ import { BundlesModule } from './modules/bundles/bundles.module.js';
 import { EnvironmentSnapshotsModule } from './modules/environment-snapshots/environment-snapshots.module.js';
 import { EventsModule } from './modules/events/events.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { IntegrationsModule } from './modules/integrations/integrations.module.js';
 import { OrganizationsModule } from './modules/organizations/organizations.module.js';
 import { PoliciesModule } from './modules/policies/policies.module.js';
 import { PolicyCompilerModule } from './modules/policy-compiler/policy-compiler.module.js';
@@ -22,6 +22,7 @@ import { PolicyLifecycleModule } from './modules/policy-lifecycle/policy-lifecyc
 import { ProjectsModule } from './modules/projects/projects.module.js';
 import { SourceRepositoriesModule } from './modules/source-repositories/source-repositories.module.js';
 import { TelemetryModule } from './modules/telemetry/telemetry.module.js';
+import { TuningModule } from './modules/tuning/tuning.module.js';
 
 @Module({
   imports: [
@@ -45,7 +46,8 @@ import { TelemetryModule } from './modules/telemetry/telemetry.module.js';
     BundlesModule,
     TelemetryModule,
     SourceRepositoriesModule,
-    AiCredentialsModule,
+    IntegrationsModule,
+    TuningModule,
     EnvironmentSnapshotsModule,
     AnalysesModule,
     AnalysisUploadsModule,

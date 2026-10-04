@@ -21,7 +21,7 @@ import type {
 
 /**
  * Phrases that read as instructions or verdicts aimed at the classifier
- * rather than as a description of legitimate input (ADR-0010).
+ * rather than as a description of legitimate input (ADR-0014).
  */
 const JEV_CONTEXT_LINT =
   /\b(?:ignore|disregard|override|always|never)\b[^.]{0,40}\b(?:allow|block|classif|treat|flag|instruction|rule)|\b(?:classify|treat|mark|consider)\b[^.]{0,30}\b(?:as )?(?:safe|benign|harmless|trusted|attack)|\bnot an attack\b|\bsystem prompt\b/i;

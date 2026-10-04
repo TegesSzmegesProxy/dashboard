@@ -20,7 +20,7 @@ import { HTTP_METHODS } from '../v1/policy.contract.js';
 import type { PolicyHttpMethod } from '../v1/policy.contract.js';
 
 /**
- * `tessera.policy/v2` (ADR-0010): endpoint policies shaped like the proxy's
+ * `tessera.policy/v2` (ADR-0014): endpoint policies shaped like the proxy's
  * `EndpointPolicy` (`requestTools`, `fields[].tools`, `jevContext`), plus an
  * editable human-readable policy. Tools carry no configuration yet, and
  * endpoint `sampling` is still configured by the user, not by analysis.
@@ -151,7 +151,7 @@ export interface StructuredPolicyV2 {
 }
 
 /**
- * Placement rules of ADR-0010: `full` tools on the endpoint, `field` tools on
+ * Placement rules of ADR-0014: `full` tools on the endpoint, `field` tools on
  * non-file fields, `file` tools only on `file` fields, no duplicates. Returns
  * contract paths of violations, never values.
  */

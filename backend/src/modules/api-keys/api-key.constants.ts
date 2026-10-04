@@ -9,6 +9,7 @@ export const DEPLOYMENT_SCOPES = [
   'bundles:read',
   'heartbeats:write',
   'telemetry:write',
+  'jev-credentials:read',
 ] as const;
 
 export const API_KEY_SCOPES = [

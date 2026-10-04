@@ -20,7 +20,7 @@ import {
 } from 'class-validator';
 
 /**
- * `tessera.environment/v1` (ADR-0012): one result of `tessera -get-environment`,
+ * `tessera.environment/v1` (ADR-0016): one result of `tessera -get-environment`,
  * mirroring the collector's `EnvironmentAnalysisResult`
  * (`source/analysis/environment/types.ts` in the proxy repository). The
  * collector does not send `schemaVersion` yet; its absence means v1.

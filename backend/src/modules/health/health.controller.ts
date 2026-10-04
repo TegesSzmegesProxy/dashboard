@@ -16,6 +16,7 @@ export class HealthController {
     },
   })
   getHealth(): HealthResponse {
+    console.log('Health check endpoint called');
     return { status: 'ok', service: 'tessera-control-plane' };
   }
 }

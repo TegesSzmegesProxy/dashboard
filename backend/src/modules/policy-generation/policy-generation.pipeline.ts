@@ -83,7 +83,7 @@ export class PolicyGenerationPipeline {
     });
 
     if (attempt.kind !== 'edit') {
-      // Analyses now propose endpoint policies themselves (ADR-0009).
+      // Analyses now propose endpoint policies themselves (ADR-0013).
       return fail(
         'ANALYSIS_UNAVAILABLE',
         'Whole-policy generation from analyses was replaced by analysis policy proposals',

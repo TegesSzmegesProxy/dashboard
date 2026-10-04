@@ -1,0 +1,81 @@
+:root{
+/* Bone — the base. Never pure white. */
+--bone-50:#F7F3EB;--bone-100:#F1EBE0;--bone-200:#EAE2D3;--bone-300:#DED4C2;--bone-400:#CBBFAA;--bone-500:#ADA08A;
+/* Stone — warm greys cut from the same rock */
+--stone-500:#8C8272;--stone-600:#6E655A;--stone-700:#4C463F;--stone-800:#33302C;
+/* Ink — the dark. From the brief: #1f1f1f */
+--ink-900:#1F1F1F;--ink-950:#171615;
+/* Tessera blue — primary accent (#43A4C4 from the brief) */
+--blue-100:#D7ECF2;--blue-300:#8CC8DB;--blue-500:#43A4C4;--blue-600:#2F86A4;--blue-700:#226680;
+/* Earth semantics — fired clay, verdigris, ochre */
+--clay-100:#F1DCD2;--clay-500:#B4492F;--clay-600:#943823;
+--verdigris-100:#D9E6DC;--verdigris-500:#4F7F5E;--verdigris-600:#3C6549;
+--ochre-100:#F0E3C6;--ochre-500:#B8862C;--ochre-600:#946A1D;
+/* Terracotta — the tessera itself, used for the token motif only */
+--terracotta-400:#C98A62;--terracotta-500:#B26F48;
+
+/* Semantic aliases — light (bone) */
+--surface-page:var(--bone-100);
+--surface-sunken:var(--bone-200);
+--surface-card:var(--bone-50);
+--surface-raised:var(--bone-50);
+--surface-inverse:var(--ink-900);
+--surface-glass:rgba(247,243,235,.72);
+--surface-glass-dark:rgba(31,31,31,.70);
+--text-strong:var(--ink-900);
+--text-body:var(--stone-800);
+--text-muted:var(--stone-600);
+--text-faint:var(--stone-500);
+--text-inverse:var(--bone-100);
+--text-link:var(--blue-700);
+--text-accent:var(--blue-700);
+--border-subtle:rgba(31,31,31,.08);
+--border-default:rgba(31,31,31,.14);
+--border-strong:rgba(31,31,31,.28);
+--border-glass:rgba(247,243,235,.22);
+--accent:var(--blue-500);
+--accent-hover:var(--blue-600);
+--accent-press:var(--blue-700);
+--accent-fg:var(--ink-900);
+--focus-ring:var(--blue-500);
+--status-blocked:var(--clay-500);--status-blocked-bg:var(--clay-100);
+--status-passed:var(--verdigris-500);--status-passed-bg:var(--verdigris-100);
+--status-review:var(--ochre-500);--status-review-bg:var(--ochre-100);
+--status-jev:var(--blue-600);--status-jev-bg:var(--blue-100);
+}
+.theme-bone{
+--surface-page:var(--bone-100);
+--surface-sunken:var(--bone-200);
+--surface-card:var(--bone-50);
+--surface-raised:var(--bone-50);
+--surface-inverse:var(--ink-900);
+--surface-glass:rgba(247,243,235,.72);
+--surface-glass-dark:rgba(31,31,31,.70);
+--text-strong:var(--ink-900);
+--text-body:var(--stone-800);
+--text-muted:var(--stone-600);
+--text-faint:var(--stone-500);
+--text-inverse:var(--bone-100);
+--text-link:var(--blue-700);
+--text-accent:var(--blue-700);
+--border-subtle:rgba(31,31,31,.08);
+--border-default:rgba(31,31,31,.14);
+--border-strong:rgba(31,31,31,.28);
+--border-glass:rgba(247,243,235,.22);
+--accent:var(--blue-500);
+--accent-hover:var(--blue-600);
+--accent-press:var(--blue-700);
+--accent-fg:var(--ink-900);
+--focus-ring:var(--blue-500);
+--status-blocked:var(--clay-500);--status-blocked-bg:var(--clay-100);
+--status-passed:var(--verdigris-500);--status-passed-bg:var(--verdigris-100);
+--status-review:var(--ochre-500);--status-review-bg:var(--ochre-100);
+--status-jev:var(--blue-600);--status-jev-bg:var(--blue-100);
+}
+.theme-ink{
+--surface-page:var(--ink-900);--surface-sunken:var(--ink-950);--surface-card:#272624;--surface-raised:#2E2C2A;
+--text-strong:var(--bone-100);--text-body:var(--bone-300);--text-muted:var(--bone-500);--text-faint:var(--stone-500);
+--text-link:var(--blue-300);--text-accent:var(--blue-300);
+--border-subtle:rgba(241,235,224,.07);--border-default:rgba(241,235,224,.13);--border-strong:rgba(241,235,224,.26);
+--status-blocked-bg:rgba(180,73,47,.18);--status-passed-bg:rgba(79,127,94,.2);--status-review-bg:rgba(184,134,44,.18);--status-jev-bg:rgba(67,164,196,.16);
+}

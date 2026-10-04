@@ -26,7 +26,8 @@ export interface AuditRecord {
     | 'policyGeneration'
     | 'operationalAlert'
     | 'alertSettings'
-    | 'aiCredential'
+    | 'integrationCredential'
+    | 'tuningSettings'
     | 'environmentSnapshot'
     | 'analysisSettings';
   targetId: string;

@@ -64,6 +64,7 @@ export class PolicyCompilerService {
         }
         if (
           typeof tool.target !== 'string' ||
+          !/^(body|query)\.[^\s]+$/.test(tool.target) ||
           tool.target.length === 0 ||
           tool.target.length > 512 ||
           !tool.config ||

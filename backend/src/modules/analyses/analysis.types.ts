@@ -62,7 +62,7 @@ export interface RangeEstimate {
   high: number;
 }
 
-/** Computed from the index alone, before any model call (ADR-0011). */
+/** Computed from the index alone, before any model call (ADR-0015). */
 export interface AnalysisEstimate {
   model: string;
   workItems: RangeEstimate;
@@ -266,7 +266,7 @@ export interface AnalysisSettingsDocument {
   _id: ObjectId;
   organizationId: ObjectId;
   tenantId: ObjectId;
-  /** Explicit; analyses wait for approval when null (ADR-0011). */
+  /** Explicit; analyses wait for approval when null (ADR-0015). */
   autoApproveCeilingUsd: number | null;
   updatedBy: string;
   updatedAt: Date;

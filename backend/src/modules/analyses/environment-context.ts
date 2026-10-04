@@ -29,7 +29,7 @@ const bySeverity = <T extends { severity: EnvironmentSeverity }>(a: T, b: T) =>
 
 /**
  * Bounded, typed view of the latest environment snapshot for the agents
- * (ADR-0012). Raw scanner output never reaches the model; Lynis is host
+ * (ADR-0016). Raw scanner output never reaches the model; Lynis is host
  * context only and Trivy secret findings are counts by rule.
  */
 export class EnvironmentContext {

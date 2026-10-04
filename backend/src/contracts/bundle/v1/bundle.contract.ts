@@ -8,7 +8,10 @@ export const BUNDLE_SCHEMA_VERSION = 'tessera.bundle/v1' as const;
 export const BUNDLE_SIGNATURE_ALGORITHM = 'Ed25519' as const;
 
 /** Bundle schemas this control plane can serve, newest first. */
-export const SUPPORTED_BUNDLE_SCHEMAS = [BUNDLE_SCHEMA_VERSION] as const;
+export const SUPPORTED_BUNDLE_SCHEMAS = [
+  'tessera.bundle/v2',
+  BUNDLE_SCHEMA_VERSION,
+] as const;
 export type BundleSchemaVersion = (typeof SUPPORTED_BUNDLE_SCHEMAS)[number];
 
 /** Request header listing every bundle schema the proxy can verify. */

@@ -91,7 +91,7 @@ export class AnalysisUploadsService implements OnModuleInit {
       );
     }
 
-    // Environment context now comes from environment snapshots (ADR-0012);
+    // Environment context now comes from environment snapshots (ADR-0016);
     // the upload's environment section is summarized, not stored.
     try {
       return await this.mongo.transaction(async (session) => {

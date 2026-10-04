@@ -7,7 +7,7 @@ import type {
 
 export type ToolRunStatus = 'ok' | 'failed' | 'skipped';
 
-/** Shown wherever an analysis has no environment context (ADR-0012). */
+/** Shown wherever an analysis has no environment context (ADR-0016). */
 export const ENVIRONMENT_MISSING_NOTICE =
   'No environment snapshot exists for this project. Run `tessera -get-environment` ' +
   'to add environment context (httpx, Lynis, nmap, nuclei, Trivy). It can take ' +

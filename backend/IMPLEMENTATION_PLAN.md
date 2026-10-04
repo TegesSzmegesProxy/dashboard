@@ -34,6 +34,8 @@ src/
     policy-compiler/       structured policy to registered toolchain
     approvals/             approve/reject workflow
     bundles/               activation, signing and distribution
+    integrations/          organization integration credentials (JEV, AI model)
+    tuning/                project model settings, policy defaults, endpoint overrides
     telemetry/             redacted summaries and proxy health
     audit/                 immutable administrative audit trail
     health/                liveness and readiness
@@ -59,12 +61,12 @@ trusted as authorization.
   environment summary and collector redaction manifest. No raw package is
   stored.
 - `EnvironmentSnapshot`: one redacted `tessera -get-environment` result;
-  the latest N per tenant are kept (ADR-0012).
+  the latest N per tenant are kept (ADR-0016).
 - `Analysis`: immutable version, estimate, budget and usage, dossier, route
   rules, evidence-backed endpoint facts, coverage, AI read manifest and a
   pending `tessera.policy/v2` proposal. Its work items are separate documents.
 - `AiCredential`: an organization's provider key reference and fingerprint;
-  the key itself is in the secret store (ADR-0011).
+  the key itself is in the secret store (ADR-0015).
 - `PolicyVersion`: immutable human intent, structured intent, compilation state,
   toolchain, content hash and approval state.
 - `ActiveBundle`: schema version, runtime configuration, compiled policy,
@@ -73,6 +75,13 @@ trusted as authorization.
   health and last-seen time.
 - `TelemetryBucket`: redacted aggregate counters; never raw request bodies,
   field values, authorization headers or cookies.
+- `JevCredential`: one per organization, AES-256-GCM encrypted key, version
+  and update metadata. The key is never returned to the dashboard.
+- `AiModelCredential`: one per organization, provider plus AES-256-GCM
+  encrypted key, version and update metadata. Write-only like `JevCredential`.
+- `TuningSettings`: one record per tenant and section (model settings,
+  policy defaults, endpoint overrides), with version and update metadata.
+  Stored inputs only; never part of a bundle (ADR-0011).
 - `AuditEntry`: actor, action, target, timestamp and safe metadata.
 
 ## 4. Persistence and infrastructure
@@ -82,15 +91,15 @@ trusted as authorization.
 - Redis is non-authoritative and supports queues, rate limiting, idempotency,
   caching and outbox delivery coordination.
 - Collector uploads are stored as metadata only. Repository source exists
-  only inside the per-job analysis sandbox and is never persisted (ADR-0009).
+  only inside the per-job analysis sandbox and is never persisted (ADR-0013).
 - Customer AI keys live in a secret manager behind `SecretStore`; MongoDB
-  holds only references and fingerprints (ADR-0011).
+  holds only references and fingerprints (ADR-0015).
 - Signing uses Ed25519. The private key comes from a secret manager or
   deployment secret and is never stored in MongoDB.
 - External AI access is hidden behind a provider-independent interface with
   schema-validated structured output.
-- Cross-repository wire contracts are published as a separately versioned
-  `@tessera/contracts` package. The proxy must not import dashboard internals.
+- Versioned wire schemas live in the proxy repository. This backend maintains
+  matching transport definitions and the proxy never imports dashboard internals.
 
 ## 5. API conventions
 
@@ -177,16 +186,17 @@ Exit criteria: an authorized proxy receives only its tenants' signed bundles;
 tampering and unsupported formats are rejected during manual compatibility
 verification with the proxy repository.
 
-Decision: bundles use `tessera.bundle/v1`, Ed25519 signatures over RFC 8785
-canonical bytes, and required `Tessera-Bundle-Schemas` /
+Decision: new activations use `tessera.bundle/v2` with explicit runtime decision
+settings (ADR-0012); existing v1 bundles remain immutable. Ed25519 signatures
+cover canonical bytes, and required `Tessera-Bundle-Schemas` /
 `Tessera-Tool-Registries` request headers (406 when the active bundle is not
 acceptable). Activation builds and signs the bundle transactionally; runtime
 configuration edits stay pending until re-activation. See ADR-0005.
 
-Status: the control-plane side is implemented and manually verified. Manual
-compatibility verification against the proxy remains open because the proxy
-does not yet implement bundle verification, and the contracts still live in
-`src/contracts` rather than `@tessera/contracts` (ADR-0004).
+Status: the control plane emits v2 and the proxy verifies signed v2 bundles,
+including wrong-tenant, tampered and unknown-tool cases in local tests. A live
+dashboard-to-proxy run remains open. Wire schemas live in the proxy repository
+by deployment decision; this backend keeps matching transport definitions.
 
 ### Phase 5 — collector and application analysis
 
@@ -210,7 +220,7 @@ provider-independent interface. See ADR-0006.
 Status: implemented and manually verified with stubbed GitHub and AI network
 calls. A live GitHub App installation and a real Claude call have not been
 exercised yet. Source handling and AI analysis are being replaced by Phase 8
-(ADR-0009).
+(ADR-0013).
 
 ### Phase 6 — policy generation and editing
 
@@ -235,7 +245,7 @@ ADR-0007.
 Status: implemented and manually verified against MongoDB with a stubbed AI
 provider. A real Claude call has not been exercised yet. Whole-policy
 generation is being replaced by Phase 8; edits become per endpoint
-(ADR-0010).
+(ADR-0014).
 
 ### Phase 7 — telemetry and operations
 
@@ -256,14 +266,16 @@ for later delivery, and the attack-rate alert is opt-in per project with no
 default threshold. See ADR-0008.
 
 Status: control-plane side implemented and manually verified against MongoDB
-with simulated proxy batches. The proxy does not send telemetry yet.
+with simulated proxy batches. The proxy now sends redacted minute counters;
+a live dashboard-to-proxy run remains open.
 
 ### Phase 8 — agentic analysis and endpoint policies
 
 Replaces the single-call analysis and whole-policy generation of Phases 5–6.
 
-- M0: ADR-0009, ADR-0010, glossary, contracts `analysis/v2`, `policy/v2`,
-  `tools/v2` registry module and `bundle/v2`.
+- M0: ADR-0013, ADR-0014, glossary, contracts `analysis/v2`, `policy/v2`,
+  `tools/v2` registry module; the bundle schema that carries them is
+  open (`tessera.bundle/v2` is taken by ADR-0012).
 - M1: per-job analysis sandbox (`repo-host` image, no network, tmpfs) fed
   from the existing GitHub tarball path; the worker becomes its own
   deployable with container-runtime access.
@@ -276,7 +288,8 @@ Replaces the single-call analysis and whole-policy generation of Phases 5–6.
 - M5: recon, endpoint, sweep and endpoint-edit prompts.
 - M6: pipeline assembly, reconciliation and coverage gate; analysis and
   pending policy version committed together.
-- M7: compiler, policy versions and bundles v2; per-endpoint edits.
+- M7: compiler, policy versions and the bundle schema for policy v2 (not
+  `tessera.bundle/v2`, see ADR-0014); per-endpoint edits.
 - M8: dashboard API for coverage, endpoint policies and edits.
 - M9: selective verification pass, incremental re-analysis, cost limits.
 - M10: removal of the v1 analysis and policy paths.
@@ -286,7 +299,7 @@ framework itself lists is either an endpoint in the analysis or a visible
 unresolved work item; the sandbox has no network and never sees credentials;
 an endpoint edit produces a version that differs only in that endpoint.
 
-Decision: see ADR-0009 (accepted) and ADR-0010 (proposed until the tool
+Decision: see ADR-0013 (accepted) and ADR-0014 (proposed until the tool
 list is confirmed).
 
 Status: M0-M6 and the M8 analysis routes are implemented:
@@ -304,7 +317,8 @@ Not yet exercised: the Docker sandbox (no Docker access in development), a live
 GitHub App and a real model.
 
 Next:
-- M7: v2 policy versions from proposals, per-endpoint edits and bundle v2.
+- M7: v2 policy versions from proposals, per-endpoint edits and the bundle
+  schema for policy v2 (not `tessera.bundle/v2`, see ADR-0014).
 - M9: verification pass and incremental re-analysis.
 - Analysis does not set endpoint `sampling` yet.
 
@@ -326,7 +340,9 @@ only after an explicit project decision changes this policy.
 
 1. Dashboard identity uses Auth0 access tokens; authorization roles remain
    `owner`, `admin`, and `viewer` memberships stored by Tessera. See ADR-0001.
-2. Whether JEV credentials are customer-managed per proxy or platform-managed.
+2. JEV credentials are managed per organization in the control plane,
+   encrypted at rest and pulled by proxies with an opt-in deployment scope.
+   See ADR-0009.
 3. Exact JEV API contract.
 4. Runtime configuration requires an explicit `failureBehavior` value when a
    proxy has neither a valid remote bundle nor a last known good bundle. See
@@ -337,20 +353,26 @@ only after an explicit project decision changes this policy.
    bundle schemas and delayed proxy upgrade compatibility are defined by
    ADR-0005.
 7. Collector upload contents, file allowlist, retention and storage are
-   defined by ADR-0006, with source handling replaced by ADR-0009. Data
+   defined by ADR-0006, with source handling replaced by ADR-0013. Data
    residency for AI processing is not yet decided.
-8. The `tessera.tools/v2` registry (ADR-0010) holds the 20 tools the proxy
-   implements, without configuration. Before v2 bundles are distributed the
-   proxy must read v2 bundles and present JEV context to JEV as data. Tool
-   configuration is a later, joint contract change.
-9. Analyses are paid with each organization's own Anthropic API key, after a
-   cost estimate and an approved budget ceiling. Key storage (secret manager
-   or envelope encryption) needs ADR-0011 before implementation, because
-   provider credentials must not be stored in the database in plaintext.
-10. Environment context comes from snapshots the customer uploads with
+8. The organization AI model credential (ADR-0010) is consumed by analyses
+   (ADR-0015): an Anthropic key is required, and analyses never fall back to
+   the platform `ANTHROPIC_API_KEY`. Still open: whether it also replaces the
+   platform key for policy generation, and how `openai` and `custom`
+   providers (including a custom endpoint URL) are supported.
+9. Project tuning settings are stored per ADR-0011 but not yet consumed.
+   Open: which model the model settings configure (JEV runtime
+   classification or policy generation), and how policy defaults and endpoint
+   overrides (`review`, `mask`, `require`, thresholds) map into policy
+   generation or a future policy contract version.
+10. The `tessera.tools/v2` registry (ADR-0014) holds the 20 tools the proxy
+    implements, without configuration. Before policy v2 is distributed the
+    proxy must read the bundle schema that carries it and present JEV context
+    to JEV as data. Tool configuration is a later, joint contract change.
+11. Environment context comes from snapshots the customer uploads with
     `tessera -get-environment` (httpx, Lynis, nmap, nuclei, Trivy), stored in
-    MongoDB. Without one, analyses run and tell the user to run the command.
-    Contract, re-redaction, retention and Lynis trust need ADR-0012.
+    MongoDB (ADR-0016). Without one, analyses run and tell the user to run the
+    command.
 
 These decisions must be recorded as ADRs before the dependent module is
 implemented.

@@ -41,7 +41,7 @@ import {
 const HEADER_NAME = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
 
 /**
- * Environment snapshots uploaded by `tessera -get-environment` (ADR-0012).
+ * Environment snapshots uploaded by `tessera -get-environment` (ADR-0016).
  * The control plane never scans the customer network; it validates, redacts
  * and keeps the latest N snapshots per tenant.
  */

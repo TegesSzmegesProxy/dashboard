@@ -51,7 +51,7 @@ safe metadata; reveal plaintext once at creation.
 collector upload (commit SHA + environment results)
   -> source fetch from the bound repository into a disposable analysis sandbox
   -> agentic application analysis producing evidence-backed facts and a
-     pending endpoint policy (ADR-0009, ADR-0010)
+     pending endpoint policy (ADR-0013, ADR-0014)
   -> per-endpoint natural-language edit (AI) or human import
   -> schema validation
   -> compilation against the supported tool registry
@@ -80,7 +80,8 @@ contract, tool identifiers, and tool configs before persisting or using the
 bundle. Secrets never belong in a bundle. Cross-repository contract evolution
 must account for proxies upgrading later than the hosted control plane.
 
-The current schema is `tessera.bundle/v1` (ADR-0005). Proxies pull it from
+The current activation schema is `tessera.bundle/v2` (ADR-0012); existing v1
+bundles remain immutable and serve compatible proxies. Proxies pull it from
 `GET /api/v1/tenants/:tenantId/active-bundle` with a deployment key, declare
 the bundle schemas and tool registries they support in request headers, and
 poll with `If-None-Match`. They report loaded versions to
@@ -92,6 +93,11 @@ Proxies send batched, redacted `tessera.telemetry/v1` counters to
 policy endpoint keys of the loaded bundle. Telemetry intake and operational
 alerts are separate from distribution and never change it.
 
+The organization's JEV credential is not part of a bundle. Proxies pull it
+from `GET /api/v1/proxy/jev-credential` (`tessera.jev-credential/v1`) with a
+deployment key that holds `jev-credentials:read`, keep it in memory only, and
+keep the previous key when a fetch fails (ADR-0009).
+
 ## Data and infrastructure
 
 - MongoDB is authoritative for organization- and tenant-owned state.
@@ -102,9 +108,13 @@ alerts are separate from distribution and never change it.
   per-job sandbox (in-memory filesystem, no network) that is destroyed when
   the analysis ends. MongoDB stores upload metadata, the AI read manifest
   (path and line ranges sent to the AI provider, redaction counts) and the
-  derived analysis (ADR-0009).
+  derived analysis (ADR-0013).
 - Signing keys, the GitHub App private key and provider credentials come from
   deployment secrets or a secret manager, never the database or frontend.
+- Customer integration credentials (the organization JEV key and AI model
+  key) are the one exception: MongoDB stores them encrypted under
+  `CREDENTIAL_ENCRYPTION_KEY`, and they are write-only for the dashboard
+  (ADR-0009, ADR-0010).
 - Telemetry is best-effort and redacted. It must not affect bundle distribution
   or runtime decisions.
 
@@ -130,4 +140,3 @@ The backend is an early NestJS modular monolith with configuration validation,
 Swagger setup, and a health module. The root HTML files are mockups; a frontend
 stack has not been selected. The authoritative implementation sequence and
 open decisions are in `backend/IMPLEMENTATION_PLAN.md`.
-
