@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   HttpCode,
@@ -21,6 +22,7 @@ import { DashboardAuthGuard } from '../auth/dashboard-auth.guard.js';
 import type { DashboardPrincipal } from '../auth/dashboard-principal.js';
 import { OrganizationRoleGuard } from '../organizations/organization-role.guard.js';
 import { RequireOrganizationRoles } from '../organizations/organization-roles.decorator.js';
+import type { AiModelCheckResult } from '../../infrastructure/ai/analysis-ai.service.js';
 import { TenantParamsDto } from '../projects/project.dto.js';
 import {
   AnalysisParamsDto,
@@ -87,6 +89,14 @@ export class AnalysesController {
     return this.analyses.readiness(params.organizationId, params.tenantId);
   }
 
+  /** Live check that the deployment's AI model answers; sends a fixed prompt. */
+  @Post('ai-model/check')
+  @HttpCode(HttpStatus.OK)
+  @RequireOrganizationRoles('owner', 'admin')
+  checkModel(): Promise<AiModelCheckResult> {
+    return this.analyses.checkModel();
+  }
+
   /** Starts an analysis of the bound repository's head, without a collector. */
   @Post('analyses')
   @HttpCode(HttpStatus.ACCEPTED)
@@ -123,6 +133,22 @@ export class AnalysesController {
       dto.ceilingUsd,
       dto.policyReviewMode ?? 'review',
       idempotencyKey,
+      principal.subject,
+    );
+  }
+
+  /** Deletes an analysis that has not finished or has failed. */
+  @Delete('analyses/:analysisId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequireOrganizationRoles('owner', 'admin')
+  remove(
+    @Param() params: AnalysisParamsDto,
+    @CurrentPrincipal() principal: DashboardPrincipal,
+  ): Promise<void> {
+    return this.analyses.remove(
+      params.organizationId,
+      params.tenantId,
+      params.analysisId,
       principal.subject,
     );
   }

@@ -369,8 +369,8 @@ only after an explicit project decision changes this policy.
    defined by ADR-0006, with source handling replaced by ADR-0013. Data
    residency for AI processing is not yet decided.
 8. The AI model is chosen by the deployment in its environment (ADR-0019):
-   `ANTHROPIC_API_KEY` or `ANALYSIS_AI_BASE_URL` (a keyless self-hosted
-   model), with `ANTHROPIC_ANALYSIS_MODEL` and `ANTHROPIC_POLICY_MODEL`. The
+   `ANTHROPIC_API_KEY` or `AI_BASE_URL` (a keyless self-hosted
+   model), with the single `AI_MODEL` for analyses and policy edits. The
    per-organization credential of ADR-0010 and ADR-0017 is removed. Still
    open: cost and abuse controls for a hosted deployment where the operator
    pays, and support for other providers.

@@ -803,6 +803,23 @@ paths:
         - bearer: []
       tags:
         - analyses
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/ai-model/check:
+    post:
+      operationId: AnalysesController_checkModel
+      summary: Check that the configured AI model answers
+      description: >-
+        Sends one fixed prompt to the model chosen in the control plane's
+        environment (owner or admin). Returns `ok`, the model, `local` or
+        `anthropic`, the latency and, on failure, a safe error code and message.
+        Never returns a key or URL.
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
   /api/v1/organizations/{organizationId}/projects/{tenantId}/analyses/{analysisId}:
     get:
       operationId: AnalysesController_get
@@ -810,6 +827,19 @@ paths:
       responses:
         '200':
           description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
+    delete:
+      operationId: AnalysesController_remove
+      summary: Delete an unfinished or failed dashboard-started analysis
+      parameters: []
+      responses:
+        '204':
+          description: ''
+        '409':
+          description: The analysis finished or was created by a collector upload
       security:
         - bearer: []
       tags:

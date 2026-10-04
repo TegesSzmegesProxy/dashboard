@@ -79,12 +79,15 @@ credential is configured. See ADR-0009.
 ### AI model
 
 The deployment chooses the model in its environment (ADR-0019); the dashboard
-cannot change it. Set `ANTHROPIC_API_KEY`, or `ANALYSIS_AI_BASE_URL` to use a
-self-hosted model with an Anthropic-compatible API (no key is sent to it, and
-redirects are refused). `ANTHROPIC_ANALYSIS_MODEL` and
-`ANTHROPIC_POLICY_MODEL` name the models. Without a key or a URL, analyses
-cannot start. `GET .../projects/:tenantId/analysis-readiness` shows the model,
+cannot change it. One model serves analyses and policy edits: `AI_MODEL` names
+it. Set `ANTHROPIC_API_KEY`, or `AI_BASE_URL` to use a self-hosted model with
+an Anthropic-compatible API (no key is sent to it, and redirects are
+refused; the URL wins when both are set). Without a key or a URL, analyses and
+policy edits cannot run. `GET .../projects/:tenantId/analysis-readiness` shows the model,
 whether the sandbox is configured and any unfinished analysis, never a key.
+`POST .../projects/:tenantId/ai-model/check` (owner or admin) sends one fixed
+prompt to the model and returns `ok`, the latency or a safe error code, so an
+operator can tell whether the model answers.
 
 ### Project tuning settings
 
@@ -146,7 +149,7 @@ Owners and admins can edit a v1 policy version in natural language with
 returns `202` with the attempt. Poll `GET .../policy-generations/:attemptId`.
 AI output is validated and compiled; a successful attempt references a new
 pending version that still needs approval and activation, and a failed
-attempt creates no version. `ANTHROPIC_POLICY_MODEL` selects the model.
+attempt creates no version. `AI_MODEL` selects the model.
 Analyses no longer generate whole v1 policies; turning their v2 proposals
 into policy versions, and per-endpoint edits, are the next phase.
 

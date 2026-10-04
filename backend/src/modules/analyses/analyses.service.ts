@@ -17,7 +17,10 @@ import { assertIdempotencyKey } from '../../common/idempotency-key.js';
 import { isDuplicateKey, objectId } from '../../common/mongodb.js';
 import { Environment } from '../../config/environment.js';
 import { ANALYSIS_SCHEMA_V2 } from '../../contracts/analysis/v2/analysis-agent.contract.js';
-import { AnalysisAiService } from '../../infrastructure/ai/analysis-ai.service.js';
+import {
+  AiModelCheckResult,
+  AnalysisAiService,
+} from '../../infrastructure/ai/analysis-ai.service.js';
 import { EMPTY_USAGE } from '../../infrastructure/ai/pricing.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -60,6 +63,12 @@ const UNFINISHED_STATUSES: AnalysisStatus[] = [
   'awaiting_budget',
   'paused',
 ];
+
+/**
+ * Analyses that may be deleted: unfinished or failed ones. A completed or
+ * partial analysis can be the origin of a policy version, which is immutable.
+ */
+const DELETABLE_STATUSES: AnalysisStatus[] = [...UNFINISHED_STATUSES, 'failed'];
 
 @Injectable()
 export class AnalysesService implements OnModuleInit {
@@ -185,6 +194,11 @@ export class AnalysesService implements OnModuleInit {
     };
   }
 
+  /** Asks the configured model for a one-word answer (owner or admin). */
+  checkModel(): Promise<AiModelCheckResult> {
+    return this.ai.check();
+  }
+
   /**
    * Starts an analysis of the head of the bound repository's default branch,
    * without a collector upload. It runs like any other analysis: estimate,
@@ -213,7 +227,7 @@ export class AnalysesService implements OnModuleInit {
     if (!readiness.ai.configured) {
       throw new ConflictException({
         message:
-          'No AI model is configured for this control plane; set ANTHROPIC_API_KEY or ANALYSIS_AI_BASE_URL',
+          'No AI model is configured for this control plane; set ANTHROPIC_API_KEY or AI_BASE_URL',
         errorCode: 'AI_NOT_CONFIGURED',
       });
     }
@@ -407,7 +421,7 @@ export class AnalysesService implements OnModuleInit {
     }
     if (!this.ai.status.configured) {
       throw new ConflictException(
-        'No AI model is configured for this control plane; set ANTHROPIC_API_KEY or ANALYSIS_AI_BASE_URL',
+        'No AI model is configured for this control plane; set ANTHROPIC_API_KEY or AI_BASE_URL',
       );
     }
     const now = new Date();
@@ -473,6 +487,55 @@ export class AnalysesService implements OnModuleInit {
   }
 
   /** Resumes an analysis paused by exhausted provider credit. */
+  /**
+   * Deletes an analysis that has not produced a result, with its work items.
+   * A running worker loses its lease and stops at its next write. Analyses
+   * created by a collector upload are kept: the upload record refers to them.
+   */
+  async remove(
+    organizationId: string,
+    tenantId: string,
+    analysisId: string,
+    actorSubject: string,
+  ): Promise<void> {
+    const document = await this.findOwned(organizationId, tenantId, analysisId);
+    if (document.uploadId) {
+      throw new ConflictException(
+        'An analysis created by a collector upload cannot be deleted',
+      );
+    }
+    if (!DELETABLE_STATUSES.includes(document.status)) {
+      throw new ConflictException(
+        'A finished analysis cannot be deleted; its result may be the origin of a policy',
+      );
+    }
+    await this.mongo.transaction(async (session) => {
+      const deleted = await this.analyses.deleteOne(
+        { _id: document._id, status: { $in: DELETABLE_STATUSES } },
+        { session },
+      );
+      if (deleted.deletedCount === 0) {
+        throw new ConflictException('The analysis has already finished');
+      }
+      await this.workItems.deleteMany(
+        { analysisId: document._id },
+        { session },
+      );
+      await this.audit.append(
+        {
+          organizationId: document.organizationId,
+          tenantId: document.tenantId,
+          actorSubject,
+          action: 'analysis.deleted',
+          targetType: 'analysis',
+          targetId: document._id.toHexString(),
+          metadata: { status: document.status },
+        },
+        session,
+      );
+    });
+  }
+
   async resume(
     organizationId: string,
     tenantId: string,

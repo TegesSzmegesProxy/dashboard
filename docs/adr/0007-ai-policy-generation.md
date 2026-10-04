@@ -46,7 +46,7 @@ consumer of `AnalysisCompleted` to this phase.
   fixed warning that natural language is imprecise and that the structured
   policy, not the text, is what gets approved and enforced.
 - **Provider**: a provider-independent `PolicyGenerationProvider`,
-  implemented with the Claude API (`ANTHROPIC_POLICY_MODEL`, default
+  implemented with the Claude API (`AI_MODEL`, default
   `claude-opus-5-5`, server-side refusal fallbacks enabled). It receives the
   derived analysis (endpoints, fields, configuration and finding summaries)
   and, for edits, the base policy. It never receives source files.

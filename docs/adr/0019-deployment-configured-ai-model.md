@@ -18,11 +18,10 @@ does not.
 
 - **The deployment chooses the model, in its environment.** The dashboard
   neither shows nor changes it.
-  - `ANTHROPIC_ANALYSIS_MODEL` names the model, and `ANTHROPIC_POLICY_MODEL`
-    the one for policy edits.
+  - `AI_MODEL` names the one model, used for both analyses and policy edits.
   - `ANTHROPIC_API_KEY` is the key, used for analyses and policy edits.
-  - `ANALYSIS_AI_BASE_URL` selects a self-hosted Anthropic-compatible model
-    for analyses instead. When it is set, no key is sent to it, and
+  - `AI_BASE_URL` selects a self-hosted Anthropic-compatible model instead,
+    again for both. When it is set, no key is sent to it, and
     `ANTHROPIC_API_KEY` is never attached to its requests. Redirects are
     refused.
   - With neither, no model is configured: starting an analysis or approving
@@ -60,4 +59,5 @@ reversible customer secret is gone, and analyses run as soon as GitHub is
 connected.
 
 Changing the model needs a redeploy. All projects of a deployment use the
-same model.
+same model, and analyses and policy edits share it: a self-hosted model must
+support the features both use (structured output, refusal fallbacks).

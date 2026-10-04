@@ -1,8 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'node:crypto';
-import { Environment } from '../../config/environment.js';
+import { AnalysisAiService } from './analysis-ai.service.js';
 import { AI_POLICY_JSON_SCHEMA } from '../../contracts/policy-generation/v1/ai-policy.contract.js';
 import {
   mapAnthropicError,
@@ -33,26 +32,19 @@ Rules:
 
 @Injectable()
 export class AnthropicPolicyGenerationProvider extends PolicyGenerationProvider {
-  private readonly client: Anthropic | null;
-  private readonly model: string;
-
-  constructor(config: ConfigService<Environment, true>) {
+  constructor(private readonly ai: AnalysisAiService) {
     super();
-    const apiKey = config.get('ANTHROPIC_API_KEY', { infer: true });
-    this.model = config.get('ANTHROPIC_POLICY_MODEL', { infer: true });
-    this.client = apiKey
-      ? new Anthropic({ apiKey, timeout: 20 * 60_000, maxRetries: 2 })
-      : null;
   }
 
   get isConfigured(): boolean {
-    return this.client !== null;
+    return this.ai.status.configured;
   }
 
   async generate(
     input: PolicyGenerationInput,
   ): Promise<PolicyGenerationResponse> {
-    if (!this.client) {
+    const client = this.ai.createClient();
+    if (!client) {
       throw new AiProviderError(
         'PROVIDER_NOT_CONFIGURED',
         'AI provider is not configured',
@@ -60,9 +52,9 @@ export class AnthropicPolicyGenerationProvider extends PolicyGenerationProvider 
     }
     let message: Anthropic.Beta.BetaMessage;
     try {
-      message = await this.client.beta.messages
+      message = await client.beta.messages
         .stream({
-          model: this.model,
+          model: this.ai.status.model,
           max_tokens: 64_000,
           betas: ['server-side-fallback-2026-07-01'],
           fallbacks: 'default',

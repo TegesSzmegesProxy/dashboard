@@ -9,12 +9,13 @@ export type Behavior = 'allow' | 'block';
 export type ApiKeyType = 'collector' | 'deployment';
 export type ApiKeyScope =
   | 'analysis-uploads:write'
+  | 'environment-snapshots:write'
   | 'bundles:read'
   | 'heartbeats:write'
   | 'telemetry:write'
   | 'jev-credentials:read';
 export const SCOPES_BY_TYPE: Record<ApiKeyType, ApiKeyScope[]> = {
-  collector: ['analysis-uploads:write'],
+  collector: ['analysis-uploads:write', 'environment-snapshots:write'],
   deployment: ['bundles:read', 'heartbeats:write', 'telemetry:write', 'jev-credentials:read'],
 };
 
@@ -297,6 +298,15 @@ export interface AnalysisReadiness {
   sandboxConfigured: boolean;
   /** An analysis of this project that has not finished; only one runs at a time. */
   activeAnalysis: { id: string; status: AnalysisStatus } | null;
+}
+
+/** Result of a live check that the deployment's AI model answers; the message never holds a key or URL. */
+export interface AiModelCheck {
+  ok: boolean;
+  model: string;
+  mode: 'anthropic' | 'local' | null;
+  latencyMs: number | null;
+  error: { code: string; message: string } | null;
 }
 
 /** Latest environment snapshot of a project (`tessera -get-environment`, ADR-0016). */

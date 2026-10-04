@@ -41,7 +41,7 @@ export function ProjectAnalyses({ path }: { path: string }) {
         </div>
       )}
       <LoadMore hasMore={analyses.hasMore} loadMore={analyses.loadMore} />
-      {open && <AnalysisDialog path={`${path}/analyses/${open}`} projectPath={path} onClose={() => setOpen(null)} />}
+      {open && <AnalysisDialog path={`${path}/analyses/${open}`} projectPath={path} onClose={() => setOpen(null)} onDeleted={() => { setOpen(null); analyses.reload(); }} />}
     </Section>
   );
 }
@@ -92,7 +92,7 @@ function BudgetApproval({ path, a, onDone }: { path: string; a: Analysis; onDone
         <Radio name="policy-review" value="auto_apply" checked={reviewMode === 'auto_apply'} onChange={() => setReviewMode('auto_apply')}
           label={<span><strong>Apply it automatically</strong> <span className="muted small">— approve it on your behalf if it compiles and nothing is flagged for review; otherwise it waits for you.</span></span>} />
       </fieldset>
-      {!e.aiCredentialConfigured && <Note tone="error">No AI model is configured for this control plane. Set ANTHROPIC_API_KEY (or ANALYSIS_AI_BASE_URL) in its environment, then reload.</Note>}
+      {!e.aiCredentialConfigured && <Note tone="error">No AI model is configured for this control plane. Set ANTHROPIC_API_KEY (or AI_BASE_URL) in its environment, then reload.</Note>}
       <div className="actions">
         <Input label="Spending ceiling (USD)" type="number" mono value={ceiling} onChange={(ev) => setCeiling(ev.target.value)} />
         <Button disabled={!valid || !e.aiCredentialConfigured || run.pending}
@@ -106,10 +106,15 @@ function BudgetApproval({ path, a, onDone }: { path: string; a: Analysis; onDone
   );
 }
 
-function AnalysisDialog({ path, projectPath, onClose }: { path: string; projectPath: string; onClose: () => void }) {
+// Finished analyses can be the origin of a policy; collector ones are referenced by their upload.
+const DELETABLE = ['queued', 'running', 'awaiting_budget', 'paused', 'failed'];
+
+function AnalysisDialog({ path, projectPath, onClose, onDeleted }: { path: string; projectPath: string; onClose: () => void; onDeleted: () => void }) {
   const { canEdit } = useOrg();
   const api = useApi();
   const resume = useAction();
+  const del = useAction();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const { data: a, error, reload } = useResource<Analysis>(path);
   const running = a?.status === 'queued' || a?.status === 'running';
   // The worker runs in the background; poll while it works.
@@ -150,6 +155,20 @@ function AnalysisDialog({ path, projectPath, onClose }: { path: string; projectP
                 Paused: the AI provider account has no credit left ({a.errorCode}). Top it up, then resume.
                 {canEdit && <> <Button size="sm" disabled={resume.pending} onClick={() => void resume.go(() => api(`${path}/resume`, { method: 'POST' }), 'Analysis resumed').then((ok) => ok && reload())}>Resume</Button></>}
               </Note>
+            )}
+
+            {canEdit && !a.uploadId && DELETABLE.includes(a.status) && (
+              <div className="actions">
+                {confirmDelete ? (
+                  <>
+                    <span className="small muted">Delete this analysis? Its progress and work items are removed.</span>
+                    <Button size="sm" variant="danger" disabled={del.pending} onClick={() => void del.go(() => api(path, { method: 'DELETE' }), 'Analysis deleted').then((ok) => ok && onDeleted())}>Delete</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+                  </>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => setConfirmDelete(true)}>Delete analysis</Button>
+                )}
+              </div>
             )}
 
             <div>

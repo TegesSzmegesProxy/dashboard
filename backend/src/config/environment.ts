@@ -21,9 +21,8 @@ export interface Environment {
   GITHUB_APP_CLIENT_ID?: string;
   GITHUB_APP_CLIENT_SECRET?: string;
   ANTHROPIC_API_KEY?: string;
-  ANTHROPIC_ANALYSIS_MODEL: string;
-  ANTHROPIC_POLICY_MODEL: string;
-  ANALYSIS_AI_BASE_URL?: string;
+  AI_MODEL: string;
+  AI_BASE_URL?: string;
   TELEMETRY_QUOTA_ENTRIES_PER_TENANT_HOUR: number;
   ANALYSIS_SANDBOX?: 'docker' | 'local-process';
   ANALYSIS_SANDBOX_IMAGE: string;
@@ -83,11 +82,11 @@ export const environmentSchema = Joi.object<Environment>({
   GITHUB_APP_CLIENT_ID: Joi.string().empty('').trim().min(1),
   GITHUB_APP_CLIENT_SECRET: Joi.string().empty('').min(1),
   ANTHROPIC_API_KEY: Joi.string().empty('').min(1),
-  ANTHROPIC_ANALYSIS_MODEL: Joi.string().trim().default('claude-opus-5-5'),
-  ANTHROPIC_POLICY_MODEL: Joi.string().trim().default('claude-opus-5-5'),
-  // A self-hosted Anthropic-compatible model for analyses (ADR-0019). Chosen
-  // by the operator; no key is sent to it.
-  ANALYSIS_AI_BASE_URL: Joi.string()
+  // The one model for analyses and policy edits (ADR-0019).
+  AI_MODEL: Joi.string().trim().default('claude-opus-5-5'),
+  // A self-hosted Anthropic-compatible model instead of the Anthropic API
+  // (ADR-0019). Chosen by the operator; no key is sent to it.
+  AI_BASE_URL: Joi.string()
     .empty('')
     .uri({ scheme: ['http', 'https'] }),
   TELEMETRY_QUOTA_ENTRIES_PER_TENANT_HOUR: Joi.number()

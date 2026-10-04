@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ApiError, useApi, useResource, type AnalysisReadiness, type AnalysisSummary, type EnvironmentStatus, type GitHubInstallation, type RepositoryBinding } from '../api';
+import { ApiError, useApi, useResource, type AiModelCheck, type AnalysisReadiness, type AnalysisSummary, type EnvironmentStatus, type GitHubInstallation, type RepositoryBinding } from '../api';
 import { Badge, Button, Icon } from '../components';
 import { useOrg } from '../Layout';
 import { AnalysisBadge, Loading, newIdempotencyKey, Note, Section, useAction } from '../ui';
@@ -38,6 +38,8 @@ export function GeneratePolicyCard({ path, tenantId }: { path: string; tenantId:
   const repo = useResource<RepositoryBinding>(`${path}/repository`, true);
   const env = useResource<EnvironmentStatus>(`${path}/environment`);
   const ready = useResource<AnalysisReadiness>(`${path}/analysis-readiness`);
+  const modelCheck = useAction();
+  const [checked, setChecked] = useState<AiModelCheck | null>(null);
   // One key per click-through: retrying after a failed request reuses it.
   const [idem, setIdem] = useState(newIdempotencyKey);
 
@@ -114,7 +116,22 @@ export function GeneratePolicyCard({ path, tenantId }: { path: string; tenantId:
 
             <Step n={4} title="AI model" tone={r?.ai.configured ? 'passed' : 'blocked'}
               state={r?.ai.configured ? `${r.ai.model}${r.ai.mode === 'local' ? ' · local' : ''}` : 'Not configured'}>
-              {r && !r.ai.configured && <span className="small muted">The model is set in the control plane&apos;s environment (<span className="mono">ANTHROPIC_API_KEY</span> or <span className="mono">ANALYSIS_AI_BASE_URL</span>), not in the dashboard.</span>}
+              {r && !r.ai.configured && <span className="small muted">The model is set in the control plane&apos;s environment (<span className="mono">ANTHROPIC_API_KEY</span> or <span className="mono">AI_BASE_URL</span>), not in the dashboard.</span>}
+              {r && r.ai.configured && canEdit && (
+                <span className="actions">
+                  <Button size="sm" variant="outline" disabled={modelCheck.pending}
+                    onClick={() => void modelCheck.go(async () => setChecked(await api<AiModelCheck>(`${path}/ai-model/check`, { method: 'POST' })))}>
+                    {modelCheck.pending ? 'Testing…' : 'Test model'}
+                  </Button>
+                  {checked && (
+                    <span className="small">
+                      {checked.ok
+                        ? `Model answered in ${((checked.latencyMs ?? 0) / 1000).toFixed(1)} s.`
+                        : `Model check failed: ${checked.error?.message ?? 'no answer'} (${checked.error?.code ?? 'unknown'}).`}
+                    </span>
+                  )}
+                </span>
+              )}
               {r && r.ai.configured && !r.sandboxConfigured && <span className="small muted">The analysis sandbox is not configured (<span className="mono">ANALYSIS_SANDBOX</span>), so source cannot be read.</span>}
             </Step>
           </ul>
