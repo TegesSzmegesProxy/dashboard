@@ -67,6 +67,15 @@
 - **AI model credential**: the organization's write-only default AI provider
   and API key, stored encrypted in the control plane. It is never sent to
   proxies or included in a bundle.
+- **Tuning settings**: a project's stored model settings, policy defaults and
+  endpoint overrides. They are inputs only: saving them creates no policy
+  version and changes no bundle (ADR-0011).
+- **Model settings**: a project's context length (most recent requests given
+  to the model) and sampling parameters (`temperature`, `topP`, `maxTokens`).
+- **Policy defaults**: a project's default policy action (`allow`, `review`,
+  `block`), free-text constraints and trigger threshold for every endpoint.
+- **Endpoint override**: a per-endpoint (method and path) request policy,
+  threshold and per-field rules that take precedence over the policy defaults.
 - **Telemetry**: best-effort redacted proxy health and aggregate decision data.
   It excludes raw request bodies, field values, authorization headers, and
   cookies.

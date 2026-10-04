@@ -35,6 +35,7 @@ src/
     approvals/             approve/reject workflow
     bundles/               activation, signing and distribution
     integrations/          organization integration credentials (JEV, AI model)
+    tuning/                project model settings, policy defaults, endpoint overrides
     telemetry/             redacted summaries and proxy health
     audit/                 immutable administrative audit trail
     health/                liveness and readiness
@@ -73,6 +74,9 @@ trusted as authorization.
   and update metadata. The key is never returned to the dashboard.
 - `AiModelCredential`: one per organization, provider plus AES-256-GCM
   encrypted key, version and update metadata. Write-only like `JevCredential`.
+- `TuningSettings`: one record per tenant and section (model settings,
+  policy defaults, endpoint overrides), with version and update metadata.
+  Stored inputs only; never part of a bundle (ADR-0011).
 - `AuditEntry`: actor, action, target, timestamp and safe metadata.
 
 ## 4. Persistence and infrastructure
@@ -291,6 +295,11 @@ only after an explicit project decision changes this policy.
    `ANTHROPIC_API_KEY` for analyses and policy generation, and how
    `openai` and `custom` providers (including a custom endpoint URL) are
    supported.
+9. Project tuning settings are stored per ADR-0011 but not yet consumed.
+   Open: which model the model settings configure (JEV runtime
+   classification or policy generation), and how policy defaults and endpoint
+   overrides (`review`, `mask`, `require`, thresholds) map into policy
+   generation or a future policy contract version.
 
 These decisions must be recorded as ADRs before the dependent module is
 implemented.

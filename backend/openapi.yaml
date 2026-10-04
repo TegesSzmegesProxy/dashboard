@@ -581,43 +581,6 @@ paths:
         - bearer: []
       tags:
         - source repositories
-  /api/v1/organizations/{organizationId}/integrations/jev:
-    get:
-      operationId: JevCredentialController_get
-      parameters: []
-      responses:
-        '200':
-          description: ''
-      security:
-        - bearer: []
-      tags:
-        - integrations
-    put:
-      operationId: JevCredentialController_set
-      parameters: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PutJevCredentialDto'
-      responses:
-        '200':
-          description: ''
-      security:
-        - bearer: []
-      tags:
-        - integrations
-    delete:
-      operationId: JevCredentialController_remove
-      parameters: []
-      responses:
-        '204':
-          description: ''
-      security:
-        - bearer: []
-      tags:
-        - integrations
   /api/v1/organizations/{organizationId}/integrations/ai-model:
     get:
       operationId: AiModelCredentialController_get
@@ -655,6 +618,43 @@ paths:
         - bearer: []
       tags:
         - integrations
+  /api/v1/organizations/{organizationId}/integrations/jev:
+    get:
+      operationId: JevCredentialController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - integrations
+    put:
+      operationId: JevCredentialController_set
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutJevCredentialDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - integrations
+    delete:
+      operationId: JevCredentialController_remove
+      parameters: []
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - integrations
   /api/v1/proxy/jev-credential:
     get:
       operationId: ProxyJevCredentialController_get
@@ -668,6 +668,87 @@ paths:
         - bearer: []
       tags:
         - proxy distribution
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/model-settings:
+    get:
+      operationId: TuningController_getModelSettings
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
+    put:
+      operationId: TuningController_setModelSettings
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutModelSettingsDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policy-defaults:
+    get:
+      operationId: TuningController_getPolicyDefaults
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
+    put:
+      operationId: TuningController_setPolicyDefaults
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutPolicyDefaultsDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/endpoint-overrides:
+    get:
+      operationId: TuningController_getEndpointOverrides
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
+    put:
+      operationId: TuningController_setEndpointOverrides
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutEndpointOverridesDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - tuning
   /api/v1/organizations/{organizationId}/projects/{tenantId}/analyses:
     get:
       operationId: AnalysesController_list
@@ -1358,6 +1439,129 @@ components:
           writeOnly: true
       required:
         - apiKey
+    PutModelSettingsDto:
+      type: object
+      properties:
+        contextLength:
+          type: number
+          minimum: 1
+          maximum: 100
+          description: Number of most recent requests given to the model as context.
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+        topP:
+          type: number
+          minimum: 0
+          maximum: 1
+        maxTokens:
+          type: number
+          minimum: 1
+          maximum: 1000000
+          description: Per response.
+      required:
+        - contextLength
+        - temperature
+        - topP
+        - maxTokens
+    PutPolicyDefaultsDto:
+      type: object
+      properties:
+        defaultAction:
+          type: string
+          enum:
+            - allow
+            - review
+            - block
+        customConstraints:
+          type: string
+          maxLength: 2000
+          description: >-
+            Free-text constraints for every endpoint. May be empty; must not
+            contain credentials.
+        threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Score at which a policy is triggered.
+      required:
+        - defaultAction
+        - customConstraints
+        - threshold
+    FieldOverrideDto:
+      type: object
+      properties:
+        name:
+          type: string
+          example: card_number
+          maxLength: 256
+        rule:
+          type: string
+          enum:
+            - allow
+            - require
+            - mask
+            - review
+            - block
+        constraints:
+          type: string
+          maxLength: 2000
+          description: May be empty; must not contain credentials.
+      required:
+        - name
+        - rule
+        - constraints
+    EndpointOverrideDto:
+      type: object
+      properties:
+        method:
+          type: string
+          enum:
+            - DELETE
+            - GET
+            - HEAD
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+        path:
+          type: string
+          example: /v1/checkout
+        requestPolicy:
+          type: string
+          enum:
+            - allow
+            - review
+            - block
+          nullable: true
+          description: null uses the policy defaults.
+        threshold:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: null uses the policy defaults.
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldOverrideDto'
+      required:
+        - method
+        - path
+        - requestPolicy
+        - threshold
+        - fields
+    PutEndpointOverridesDto:
+      type: object
+      properties:
+        endpoints:
+          description: Replaces every override of the project. Empty clears them.
+          type: array
+          items:
+            $ref: '#/components/schemas/EndpointOverrideDto'
+      required:
+        - endpoints
     SourceRevisionV1Dto:
       type: object
       properties:

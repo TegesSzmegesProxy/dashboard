@@ -350,12 +350,15 @@ export interface AnalysisUpload {
   receivedAt: string;
 }
 
-// ---------- PROPOSED contracts: in the mockups, NOT in the backend yet ----------
-// Every path below is a suggestion for the backend. See "Proposed endpoints" in CLAUDE.md.
+// Project tuning settings (ADR-0011): stored inputs that change no policy version or bundle.
+// PUT bodies use the plain types; GET returns the `*View` with every value null until first saved.
 
+interface TuningMeta { tenantId: string; version: number | null; updatedBy: string | null; updatedAt: string | null }
 export interface ModelSettings { contextLength: number; temperature: number; topP: number; maxTokens: number }
+export type ModelSettingsView = TuningMeta & { [K in keyof ModelSettings]: ModelSettings[K] | null };
 export type PolicyAction = 'allow' | 'review' | 'block';
 export interface PolicyDefaults { defaultAction: PolicyAction; customConstraints: string; threshold: number }
+export type PolicyDefaultsView = TuningMeta & { [K in keyof PolicyDefaults]: PolicyDefaults[K] | null };
 export type FieldRule = 'allow' | 'require' | 'mask' | 'review' | 'block';
 export interface EndpointOverride {
   method: HttpMethod;
@@ -364,6 +367,7 @@ export interface EndpointOverride {
   threshold: number | null;
   fields: { name: string; rule: FieldRule; constraints: string }[];
 }
+export type EndpointOverridesView = TuningMeta & { endpoints: EndpointOverride[] };
 
 export class ApiError extends Error {
   constructor(

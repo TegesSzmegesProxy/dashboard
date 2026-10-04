@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { useApi, useProposed, type EndpointOverride, type FieldRule, type HttpMethod, type ModelSettings, type PolicyAction, type PolicyDefaults } from '../api';
+import { useApi, useProposed, type EndpointOverride, type EndpointOverridesView, type FieldRule, type HttpMethod, type ModelSettings, type ModelSettingsView, type PolicyAction, type PolicyDefaultsView } from '../api';
 import { Badge, Button, IconButton, Input, Select } from '../components';
 import { useOrg } from '../Layout';
 import { Loading, Note, ProposedNote, Section, Slider, useAction } from '../ui';
 
-// Everything on this tab comes from the mockups; none of these endpoints exist yet.
+// Saving here changes no policy version or bundle (ADR-0011).
 // Nothing is pre-filled: unset values stay unset until the operator chooses them.
 
 const ACTIONS: { value: PolicyAction; label: string }[] = [
@@ -52,19 +52,19 @@ export function ProjectTuning({ path }: { path: string }) {
 
 function ModelEditor({ path }: { path: string }) {
   return (
-    <Proposed<ModelSettings> path={path} title="Model context and sampling" desc="How much request history is given to the model as context, and how its output is generated.">
+    <Proposed<ModelSettingsView> path={path} title="Model context and sampling" desc="How much request history is given to the model as context, and how its output is generated.">
       {(d, reload) => <ModelForm path={path} d={d} reload={reload} />}
     </Proposed>
   );
 }
 
-function ModelForm({ path, d, reload }: { path: string; d: ModelSettings | null; reload: () => void }) {
+function ModelForm({ path, d, reload }: { path: string; d: ModelSettingsView | null; reload: () => void }) {
   const api = useApi();
   const run = useAction();
   const [ctx, setCtx] = useState<number | null>(d?.contextLength ?? null);
   const [temp, setTemp] = useState<number | null>(d?.temperature ?? null);
   const [topP, setTopP] = useState<number | null>(d?.topP ?? null);
-  const [max, setMax] = useState(d ? String(d.maxTokens) : '');
+  const [max, setMax] = useState(d?.maxTokens != null ? String(d.maxTokens) : '');
   const maxN = Number(max);
   const maxOk = Number.isInteger(maxN) && maxN >= 1;
   const valid = ctx !== null && temp !== null && topP !== null && maxOk;
@@ -84,13 +84,13 @@ function ModelForm({ path, d, reload }: { path: string; d: ModelSettings | null;
 
 function DefaultsEditor({ path }: { path: string }) {
   return (
-    <Proposed<PolicyDefaults> path={path} title="Global policies and thresholds" desc="Defaults applied to every endpoint unless overridden below.">
+    <Proposed<PolicyDefaultsView> path={path} title="Global policies and thresholds" desc="Defaults applied to every endpoint unless overridden below.">
       {(d, reload) => <DefaultsForm path={path} d={d} reload={reload} />}
     </Proposed>
   );
 }
 
-function DefaultsForm({ path, d, reload }: { path: string; d: PolicyDefaults | null; reload: () => void }) {
+function DefaultsForm({ path, d, reload }: { path: string; d: PolicyDefaultsView | null; reload: () => void }) {
   const api = useApi();
   const run = useAction();
   const [action, setAction] = useState<PolicyAction | ''>(d?.defaultAction ?? '');
@@ -118,7 +118,7 @@ function DefaultsForm({ path, d, reload }: { path: string; d: PolicyDefaults | n
 
 function OverridesEditor({ path }: { path: string }) {
   return (
-    <Proposed<{ endpoints: EndpointOverride[] }> path={path} title="Endpoint-specific management" desc="Override the policy and threshold per endpoint, per request and per field.">
+    <Proposed<EndpointOverridesView> path={path} title="Endpoint-specific management" desc="Override the policy and threshold per endpoint, per request and per field.">
       {(d, reload) => <OverridesForm path={path} initial={d?.endpoints ?? []} reload={reload} />}
     </Proposed>
   );

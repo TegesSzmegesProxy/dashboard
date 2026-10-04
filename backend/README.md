@@ -85,6 +85,16 @@ with `GET` and disconnect it with `DELETE`. It is stored like the JEV
 credential and never returned. Analyses and policy generation do not use it
 yet. See ADR-0010.
 
+### Project tuning settings
+
+Owners and admins replace a project's model settings, policy defaults and
+endpoint overrides with `PUT` on
+`/api/v1/organizations/:organizationId/projects/:tenantId/model-settings`,
+`.../policy-defaults` and `.../endpoint-overrides`; viewers may `GET` them.
+Unsaved sections return `null` values (or no endpoints); there are no
+defaults. Constraints containing a detectable credential are rejected with
+`422`. Saving changes no policy version or bundle. See ADR-0011.
+
 ### Application analysis
 
 Collectors send `POST /api/v1/tenants/:tenantId/analysis-uploads` with a

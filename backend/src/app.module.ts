@@ -21,6 +21,7 @@ import { PolicyLifecycleModule } from './modules/policy-lifecycle/policy-lifecyc
 import { ProjectsModule } from './modules/projects/projects.module.js';
 import { SourceRepositoriesModule } from './modules/source-repositories/source-repositories.module.js';
 import { TelemetryModule } from './modules/telemetry/telemetry.module.js';
+import { TuningModule } from './modules/tuning/tuning.module.js';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { TelemetryModule } from './modules/telemetry/telemetry.module.js';
     TelemetryModule,
     SourceRepositoriesModule,
     IntegrationsModule,
+    TuningModule,
     AnalysesModule,
     AnalysisUploadsModule,
     PolicyGenerationModule,
