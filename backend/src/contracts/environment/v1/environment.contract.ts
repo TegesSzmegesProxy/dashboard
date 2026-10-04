@@ -374,7 +374,10 @@ export class EnvironmentSnapshotV1Dto {
   @IsIn([ENVIRONMENT_SCHEMA_VERSION])
   schemaVersion?: typeof ENVIRONMENT_SCHEMA_VERSION;
 
-  /** Must match the route's tenant; the route and key decide the tenant. */
+  /**
+   * The route tenant's id or slug (the collector sends the proxy's TENANT_ID);
+   * the route and key decide the tenant.
+   */
   @IsString()
   @Matches(/^[A-Za-z0-9_-]{1,40}$/)
   tenantId!: string;

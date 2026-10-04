@@ -82,20 +82,19 @@ export class EnvironmentSnapshotsService implements OnModuleInit {
     idempotencyKey: string | undefined,
   ): Promise<EnvironmentSnapshotReceipt> {
     assertIdempotencyKey(idempotencyKey);
-    if (dto.tenantId !== tenantId) {
-      throw new UnprocessableEntityException(
-        'The snapshot tenantId does not match the route tenant',
-      );
-    }
     const organizationObjectId = objectId(principal.organizationId);
     const tenantObjectId = objectId(tenantId);
-    if (
-      !(await this.projects.findRuntimeConfiguration(
-        organizationObjectId,
-        tenantObjectId,
-      ))
-    ) {
-      throw new NotFoundException('Tenant not found');
+    const slug = await this.projects.findSlug(
+      organizationObjectId,
+      tenantObjectId,
+    );
+    if (slug === null) throw new NotFoundException('Tenant not found');
+    // The collector names the tenant the way the proxy is configured: by its
+    // id or by its slug. The route and key remain what decide the tenant.
+    if (dto.tenantId !== tenantId && dto.tenantId !== slug) {
+      throw new UnprocessableEntityException(
+        'The snapshot tenantId matches neither the route tenant id nor its slug',
+      );
     }
     const runs = this.normalizeRuns(dto);
     const redacted = this.redact(runs);

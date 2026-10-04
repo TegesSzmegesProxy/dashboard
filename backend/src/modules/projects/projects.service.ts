@@ -142,6 +142,18 @@ export class ProjectsService implements OnModuleInit {
     return count === uniqueTenantIds.length;
   }
 
+  /** The tenant's slug, or null when it does not belong to the organization. */
+  async findSlug(
+    organizationId: ObjectId,
+    tenantId: ObjectId,
+  ): Promise<string | null> {
+    const tenant = await this.collection.findOne(
+      { _id: tenantId, organizationId },
+      { projection: { slug: 1 } },
+    );
+    return tenant?.slug ?? null;
+  }
+
   async findRuntimeConfiguration(
     organizationId: ObjectId,
     tenantId: ObjectId,
