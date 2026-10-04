@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AnalysisAiService } from './analysis-ai.service.js';
-import { AnthropicPolicyGenerationProvider } from './anthropic-policy-generation.provider.js';
+import { LlmPolicyGenerationProvider } from './llm-policy-generation.provider.js';
 import { PolicyGenerationProvider } from './policy-generation.provider.js';
 
 @Module({
@@ -8,7 +8,7 @@ import { PolicyGenerationProvider } from './policy-generation.provider.js';
     AnalysisAiService,
     {
       provide: PolicyGenerationProvider,
-      useClass: AnthropicPolicyGenerationProvider,
+      useClass: LlmPolicyGenerationProvider,
     },
   ],
   exports: [AnalysisAiService, PolicyGenerationProvider],

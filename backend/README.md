@@ -80,9 +80,11 @@ credential is configured. See ADR-0009.
 
 The deployment chooses the model in its environment (ADR-0019); the dashboard
 cannot change it. One model serves analyses and policy edits: `AI_MODEL` names
-it. Set `ANTHROPIC_API_KEY`, or `AI_BASE_URL` to use a self-hosted model with
-an Anthropic-compatible API (no key is sent to it, and redirects are
-refused; the URL wins when both are set). Without a key or a URL, analyses and
+it. Set one of `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` (Google Gemini; `AI_MODEL`
+is then required) or `AI_BASE_URL` (a self-hosted model with an
+Anthropic-compatible API; no key is sent to it, and redirects are refused).
+When more than one is set, `AI_PROVIDER=anthropic|gemini` must say which one
+receives the code, or the process refuses to start (ADR-0020). Without a key or a URL, analyses and
 policy edits cannot run. `GET .../projects/:tenantId/analysis-readiness` shows the model,
 whether the sandbox is configured and any unfinished analysis, never a key.
 `POST .../projects/:tenantId/ai-model/check` (owner or admin) sends one fixed

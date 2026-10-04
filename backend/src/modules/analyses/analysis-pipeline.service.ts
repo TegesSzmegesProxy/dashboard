@@ -181,7 +181,7 @@ export class AnalysisPipeline {
     config: ConfigService<Environment, true>,
   ) {
     this.prices = new PriceTable(config.get('AI_PRICE_TABLE', { infer: true }));
-    this.model = config.get('AI_MODEL', { infer: true });
+    this.model = this.ai.status.model;
     this.maxWorkItems = config.get('ANALYSIS_MAX_WORK_ITEMS', { infer: true });
     this.concurrency = config.get('ANALYSIS_ITEM_CONCURRENCY', { infer: true });
     this.limits = {
@@ -477,7 +477,7 @@ export class AnalysisPipeline {
       recorder.record(
         'recon',
         'failed',
-        'No AI model is configured for this control plane; set ANTHROPIC_API_KEY or AI_BASE_URL',
+        'No AI model is configured for this control plane; set ANTHROPIC_API_KEY, GEMINI_API_KEY or AI_BASE_URL',
         'AI_NOT_CONFIGURED',
       );
       await this.saveSteps(job, leaseOwner, recorder);

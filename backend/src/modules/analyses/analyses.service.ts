@@ -227,7 +227,7 @@ export class AnalysesService implements OnModuleInit {
     if (!readiness.ai.configured) {
       throw new ConflictException({
         message:
-          'No AI model is configured for this control plane; set ANTHROPIC_API_KEY or AI_BASE_URL',
+          'No AI model is configured for this control plane; set ANTHROPIC_API_KEY, GEMINI_API_KEY or AI_BASE_URL',
         errorCode: 'AI_NOT_CONFIGURED',
       });
     }
@@ -421,7 +421,7 @@ export class AnalysesService implements OnModuleInit {
     }
     if (!this.ai.status.configured) {
       throw new ConflictException(
-        'No AI model is configured for this control plane; set ANTHROPIC_API_KEY or AI_BASE_URL',
+        'No AI model is configured for this control plane; set ANTHROPIC_API_KEY, GEMINI_API_KEY or AI_BASE_URL',
       );
     }
     const now = new Date();

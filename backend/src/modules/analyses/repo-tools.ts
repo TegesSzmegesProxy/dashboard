@@ -1,12 +1,14 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { redactSecrets } from '../../common/secret-detection.js';
 import {
+  METHOD_GROUP_SCHEMA,
+  PATH_GROUP_SCHEMA,
   SUBMIT_ENDPOINT_SCHEMA,
   SUBMIT_RECON_SCHEMA,
   SUBMIT_SWEEP_SCHEMA,
 } from '../../contracts/analysis/v2/analysis-agent.contract.js';
 import { HTTP_METHODS } from '../../contracts/policy/v1/policy.contract.js';
 import type { ToolExecution } from '../../infrastructure/ai/agent/agent-loop.js';
+import type { LlmTool } from '../../infrastructure/ai/llm/llm.types.js';
 import {
   HostCallError,
   RepoSandboxSession,
@@ -32,11 +34,10 @@ const strict = (
   name: string,
   description: string,
   properties: Record<string, Schema>,
-): Anthropic.Beta.BetaTool => ({
+): LlmTool => ({
   name,
   description,
-  strict: true,
-  input_schema: {
+  inputSchema: {
     type: 'object',
     properties,
     required: Object.keys(properties),
@@ -44,7 +45,7 @@ const strict = (
   },
 });
 
-const NAVIGATION_TOOLS: Anthropic.Beta.BetaTool[] = [
+const NAVIGATION_TOOLS: LlmTool[] = [
   strict(
     'list_files',
     'List repository files (path, lines, language, index tier). Filter by directory or glob; paginate with offset.',
@@ -106,21 +107,19 @@ const TEST_RULE_TOOL = strict(
     pattern: { type: 'string' },
     caseInsensitive: { type: 'boolean' },
     method: { type: ['string', 'null'], enum: [...HTTP_METHODS, null] },
-    methodGroup: { type: ['integer', 'null'] },
-    pathGroup: { type: 'integer' },
+    methodGroup: METHOD_GROUP_SCHEMA,
+    pathGroup: PATH_GROUP_SCHEMA,
     pathPrefix: { type: 'string' },
   },
 );
 
-const submit = (name: string, description: string, schema: Schema) =>
-  ({
-    name,
-    description,
-    strict: true,
-    input_schema: schema as Anthropic.Beta.BetaTool['input_schema'],
-  }) satisfies Anthropic.Beta.BetaTool;
+const submit = (
+  name: string,
+  description: string,
+  schema: Schema,
+): LlmTool => ({ name, description, inputSchema: schema });
 
-export const RECON_TOOLS: Anthropic.Beta.BetaTool[] = [
+export const RECON_TOOLS: LlmTool[] = [
   ...NAVIGATION_TOOLS,
   NOTE_TOOL,
   TEST_RULE_TOOL,
@@ -131,7 +130,7 @@ export const RECON_TOOLS: Anthropic.Beta.BetaTool[] = [
   ),
 ];
 
-export const ENDPOINT_TOOLS: Anthropic.Beta.BetaTool[] = [
+export const ENDPOINT_TOOLS: LlmTool[] = [
   ...NAVIGATION_TOOLS,
   NOTE_TOOL,
   submit(
@@ -141,7 +140,7 @@ export const ENDPOINT_TOOLS: Anthropic.Beta.BetaTool[] = [
   ),
 ];
 
-export const SWEEP_TOOLS: Anthropic.Beta.BetaTool[] = [
+export const SWEEP_TOOLS: LlmTool[] = [
   ...NAVIGATION_TOOLS,
   submit(
     'submit_sweep',

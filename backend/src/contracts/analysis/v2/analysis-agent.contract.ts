@@ -494,6 +494,18 @@ const candidateSchema = obj({
   evidence: evidenceList,
 });
 
+/** Regex capture groups count from 1; group 0 is the whole match. */
+export const METHOD_GROUP_SCHEMA: Schema = {
+  type: ['integer', 'null'],
+  description:
+    'Number (1-9) of the regex capture group that holds the HTTP verb, or null when `method` is fixed. Groups count from 1; never 0.',
+};
+export const PATH_GROUP_SCHEMA: Schema = {
+  type: 'integer',
+  description:
+    'Number (1-9) of the regex capture group that holds the route path. Groups count from 1; never 0.',
+};
+
 export const SUBMIT_ENDPOINT_SCHEMA: Schema = obj({
   disposition: enumOf(DISPOSITIONS),
   reason: str(),
@@ -570,8 +582,8 @@ export const SUBMIT_RECON_SCHEMA: Schema = obj({
       pattern: str(),
       caseInsensitive: bool(),
       method: enumOf(HTTP_METHODS, true),
-      methodGroup: { type: ['integer', 'null'] },
-      pathGroup: int(),
+      methodGroup: METHOD_GROUP_SCHEMA,
+      pathGroup: PATH_GROUP_SCHEMA,
       pathPrefix: str(),
     }),
   ),

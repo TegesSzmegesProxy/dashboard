@@ -369,11 +369,12 @@ only after an explicit project decision changes this policy.
    defined by ADR-0006, with source handling replaced by ADR-0013. Data
    residency for AI processing is not yet decided.
 8. The AI model is chosen by the deployment in its environment (ADR-0019):
-   `ANTHROPIC_API_KEY` or `AI_BASE_URL` (a keyless self-hosted
-   model), with the single `AI_MODEL` for analyses and policy edits. The
+   `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` or `AI_BASE_URL` (a keyless
+   self-hosted model; `AI_PROVIDER` when several are set, ADR-0020), with the
+   single `AI_MODEL` for analyses and policy edits. The
    per-organization credential of ADR-0010 and ADR-0017 is removed. Still
    open: cost and abuse controls for a hosted deployment where the operator
-   pays, and support for other providers.
+   pays, and providers beyond Anthropic and Gemini.
 9. Project tuning settings are stored per ADR-0011 but not yet consumed.
    Open: which model the model settings configure (JEV runtime
    classification or policy generation), and how policy defaults and endpoint

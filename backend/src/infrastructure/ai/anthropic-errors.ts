@@ -49,27 +49,3 @@ export function mapAnthropicError(error: unknown): AiProviderError {
   }
   return new AiProviderError('PROVIDER_ERROR', 'AI provider request failed');
 }
-
-/** Reads JSON text output after checking stop reasons that void it. */
-export function parseStructuredMessage(
-  message: Anthropic.Beta.BetaMessage,
-): unknown {
-  if (message.stop_reason === 'refusal') {
-    throw new AiProviderError('REFUSED', 'AI provider declined the request');
-  }
-  if (message.stop_reason === 'max_tokens') {
-    throw new AiProviderError(
-      'OUTPUT_TRUNCATED',
-      'AI output exceeded the token limit',
-    );
-  }
-  const text = message.content
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text)
-    .join('');
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new AiProviderError('INVALID_OUTPUT', 'AI output was not JSON');
-  }
-}

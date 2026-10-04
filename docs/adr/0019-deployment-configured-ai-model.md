@@ -3,6 +3,7 @@
 ## Status
 
 Accepted. Supersedes ADR-0010 and ADR-0017, and the AI key parts of ADR-0015.
+Amended by ADR-0020, which adds Google Gemini as a provider.
 
 ## Context
 

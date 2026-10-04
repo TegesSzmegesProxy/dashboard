@@ -809,8 +809,8 @@ paths:
       summary: Check that the configured AI model answers
       description: >-
         Sends one fixed prompt to the model chosen in the control plane's
-        environment (owner or admin). Returns `ok`, the model, `local` or
-        `anthropic`, the latency and, on failure, a safe error code and message.
+        environment (owner or admin). Returns `ok`, the model, `local`,
+        `anthropic` or `gemini`, the latency and, on failure, a safe error code and message.
         Never returns a key or URL.
       parameters: []
       responses:

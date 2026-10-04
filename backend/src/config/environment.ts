@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { selectAi } from '../infrastructure/ai/ai-selection.js';
 
 export interface Environment {
   NODE_ENV: 'development' | 'test' | 'production';
@@ -21,7 +22,9 @@ export interface Environment {
   GITHUB_APP_CLIENT_ID?: string;
   GITHUB_APP_CLIENT_SECRET?: string;
   ANTHROPIC_API_KEY?: string;
-  AI_MODEL: string;
+  GEMINI_API_KEY?: string;
+  AI_PROVIDER?: 'anthropic' | 'gemini';
+  AI_MODEL?: string;
   AI_BASE_URL?: string;
   TELEMETRY_QUOTA_ENTRIES_PER_TENANT_HOUR: number;
   ANALYSIS_SANDBOX?: 'docker' | 'local-process';
@@ -82,8 +85,12 @@ export const environmentSchema = Joi.object<Environment>({
   GITHUB_APP_CLIENT_ID: Joi.string().empty('').trim().min(1),
   GITHUB_APP_CLIENT_SECRET: Joi.string().empty('').min(1),
   ANTHROPIC_API_KEY: Joi.string().empty('').min(1),
-  // The one model for analyses and policy edits (ADR-0019).
-  AI_MODEL: Joi.string().trim().default('claude-opus-5-5'),
+  GEMINI_API_KEY: Joi.string().empty('').min(1),
+  // Required when more than one model setting is present (ADR-0020).
+  AI_PROVIDER: Joi.string().empty('').valid('anthropic', 'gemini'),
+  // The one model for analyses and policy edits (ADR-0019). Defaults to an
+  // Anthropic model; Gemini has no default.
+  AI_MODEL: Joi.string().empty('').trim(),
   // A self-hosted Anthropic-compatible model instead of the Anthropic API
   // (ADR-0019). Chosen by the operator; no key is sent to it.
   AI_BASE_URL: Joi.string()
@@ -141,7 +148,13 @@ export const environmentSchema = Joi.object<Environment>({
     'GITHUB_APP_PRIVATE_KEY',
     'GITHUB_APP_CLIENT_ID',
     'GITHUB_APP_CLIENT_SECRET',
-  );
+  )
+  .custom((value: Environment, helpers) => {
+    const selection = selectAi(value);
+    return selection.ok
+      ? value
+      : helpers.message({ custom: `AI model: ${selection.problem}` });
+  });
 
 /**
  * Validates configuration without echoing values: they are often secrets and

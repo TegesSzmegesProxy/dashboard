@@ -1,10 +1,18 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { createHash } from 'node:crypto';
+import { AiProviderError } from '../ai-provider-error.js';
 import { mapAnthropicError } from '../anthropic-errors.js';
+import type {
+  LlmChatResponse,
+  LlmClient,
+  LlmEffort,
+  LlmMessage,
+  LlmTool,
+  LlmToolResult,
+} from '../llm/llm.types.js';
 import { addUsage, EMPTY_USAGE, TokenUsage } from '../pricing.js';
 import { BudgetGuard } from './budget-guard.js';
 
-export type AgentEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type AgentEffort = LlmEffort;
 
 export interface AgentLimits {
   maxTurns: number;
@@ -44,12 +52,12 @@ export interface AgentRunResult {
 }
 
 export interface AgentRunOptions {
-  client: Anthropic;
+  client: LlmClient;
   model: string;
   effort: AgentEffort;
   /** Fixed instructions only; never repository or environment text. */
   system: string;
-  tools: Anthropic.Beta.BetaTool[];
+  tools: LlmTool[];
   /** Untrusted data blocks (dossier, environment), cached as a prefix. */
   dataBlocks: string[];
   task: string;
@@ -65,11 +73,6 @@ export interface AgentRunOptions {
   budget: BudgetGuard;
 }
 
-const BETAS: Anthropic.Beta.AnthropicBeta[] = [
-  'server-side-fallback-2026-07-01',
-  'context-management-2025-06-27',
-  'task-budgets-2026-03-13',
-];
 const MAX_NUDGES = 2;
 const MAX_REPAIRS = 2;
 
@@ -104,17 +107,19 @@ export async function runAgent(
   let repeatTurns = 0;
   let toolLimitTurn = 0;
 
-  const firstContent: Anthropic.Beta.BetaContentBlockParam[] =
-    options.dataBlocks.map((text) => ({ type: 'text', text }));
-  if (firstContent.length > 0) {
-    // The cached prefix ends after the shared data blocks.
-    (
-      firstContent[firstContent.length - 1] as Anthropic.Beta.BetaTextBlockParam
-    ).cache_control = { type: 'ephemeral' };
-  }
-  firstContent.push({ type: 'text', text: options.task });
-  const messages: Anthropic.Beta.BetaMessageParam[] = [
-    { role: 'user', content: firstContent },
+  const messages: LlmMessage[] = [
+    {
+      role: 'user',
+      content: [
+        // The cached prefix ends after the shared data blocks.
+        ...options.dataBlocks.map((text, index) => ({
+          type: 'text' as const,
+          text,
+          cacheBreakpoint: index === options.dataBlocks.length - 1,
+        })),
+        { type: 'text' as const, text: options.task },
+      ],
+    },
   ];
   const result = (
     outcome: AgentRunResult['outcome'],
@@ -134,58 +139,38 @@ export async function runAgent(
     if (Date.now() - started > limits.wallTimeMs) {
       return result({ kind: 'stopped', code: 'TIME_LIMIT' }, turn - 1);
     }
-    let response: Anthropic.Beta.BetaMessage;
+    let response: LlmChatResponse;
     try {
-      response = await options.client.beta.messages
-        .stream({
-          model: options.model,
-          max_tokens: limits.maxOutputTokensPerTurn,
-          betas: BETAS,
-          fallbacks: 'default',
-          thinking: { type: 'adaptive' },
-          output_config: {
-            effort: options.effort,
-            task_budget: { type: 'tokens', total: limits.taskBudgetTokens },
-          },
-          context_management: {
-            edits: [{ type: 'clear_tool_uses_20250919' }],
-          },
-          system: [
-            {
-              type: 'text',
-              text: options.system,
-              cache_control: { type: 'ephemeral' },
-            },
-          ],
-          tools: options.tools,
-          messages,
-        })
-        .finalMessage();
+      response = await options.client.chat({
+        model: options.model,
+        effort: options.effort,
+        system: options.system,
+        messages,
+        tools: options.tools,
+        maxOutputTokens: limits.maxOutputTokensPerTurn,
+        taskBudgetTokens: limits.taskBudgetTokens,
+      });
     } catch (error) {
-      throw mapAnthropicError(error);
+      throw error instanceof AiProviderError ? error : mapAnthropicError(error);
     }
     models.add(response.model);
-    const turnUsage: TokenUsage = {
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-      cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0,
-      cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
-    };
-    usage = addUsage(usage, turnUsage);
-    cost += budget.record(turnUsage, options.model, response.model);
+    usage = addUsage(usage, response.usage);
+    cost += budget.record(response.usage, options.model, response.model);
 
-    if (response.stop_reason === 'refusal') {
+    if (response.stopReason === 'refusal') {
       return result({ kind: 'stopped', code: 'REFUSED' }, turn);
     }
-    if (response.stop_reason === 'max_tokens') {
+    if (response.stopReason === 'max_tokens') {
       return result({ kind: 'stopped', code: 'OUTPUT_TRUNCATED' }, turn);
     }
-    messages.push({ role: 'assistant', content: response.content });
+    messages.push({
+      role: 'assistant',
+      text: response.text,
+      toolCalls: response.toolCalls,
+      providerState: response.providerState,
+    });
 
-    const calls = response.content.filter(
-      (block): block is Anthropic.Beta.BetaToolUseBlock =>
-        block.type === 'tool_use',
-    );
+    const calls = response.toolCalls;
     const submission = calls.find((call) =>
       options.submitTools.includes(call.name),
     );
@@ -199,13 +184,14 @@ export async function runAgent(
         messages.push({
           role: 'user',
           content: calls.map((call) => ({
-            type: 'tool_result',
-            tool_use_id: call.id,
+            type: 'tool_result' as const,
+            toolUseId: call.id,
+            name: call.name,
             content:
               call === submission
                 ? `Submission rejected: ${problem}. Call ${submission.name} again with arguments that match the schema exactly (correct types, no extra properties).`
                 : 'Not executed; fix the submission first.',
-            is_error: true,
+            isError: true,
           })),
         });
         continue;
@@ -220,13 +206,18 @@ export async function runAgent(
         return result({ kind: 'stopped', code: 'NO_SUBMISSION' }, turn);
       messages.push({
         role: 'user',
-        content: `Finish by calling ${options.submitTools.join(' or ')}.`,
+        content: [
+          {
+            type: 'text',
+            text: `Finish by calling ${options.submitTools.join(' or ')}.`,
+          },
+        ],
       });
       continue;
     }
 
     let allRepeats = true;
-    const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
+    const results: ({ type: 'tool_result' } & LlmToolResult)[] = [];
     for (const call of calls) {
       const key = createHash('sha256')
         .update(`${call.name}\u0000${JSON.stringify(call.input)}`)
@@ -265,9 +256,10 @@ export async function runAgent(
       }
       results.push({
         type: 'tool_result',
-        tool_use_id: call.id,
+        toolUseId: call.id,
+        name: call.name,
         content: execution.content,
-        ...(execution.isError ? { is_error: true } : {}),
+        isError: execution.isError === true,
       });
     }
     messages.push({ role: 'user', content: results });

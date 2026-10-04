@@ -30,8 +30,8 @@ The proxy and collector initiate outbound HTTPS requests. The control plane
 never connects into a customer's network. Its only outbound call for source
 is to GitHub, through a GitHub App installation that the customer linked.
 Analyses call the AI model that the deployment configures in its environment:
-the Anthropic API, or a self-hosted model at an address the operator chose
-(ADR-0019). A control-plane outage must not interrupt a proxy that already has
+the Anthropic API, the Google Gemini API, or a self-hosted model at an address
+the operator chose (ADR-0019, ADR-0020). A control-plane outage must not interrupt a proxy that already has
 a verified bundle.
 
 ## Trust boundaries and API surfaces
