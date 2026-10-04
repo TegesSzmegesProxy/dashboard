@@ -58,9 +58,9 @@ export type ApprovalSource = 'manual' | 'auto_apply';
 export interface ReviewWarning {
   /**
    * `jev_context` and `scope_override` are recomputed for every version;
-   * `analysis` is inherited.
+   * `analysis` and `upgrade` (tools dropped in a v2 to v3 upgrade) are inherited.
    */
-  kind: 'analysis' | 'jev_context' | 'scope_override';
+  kind: 'analysis' | 'jev_context' | 'scope_override' | 'upgrade';
   /** `METHOD path` of the endpoint, or `global` / `environment` for a scope. */
   endpoint: string;
   /** `location:name` of the field, or null for the endpoint itself. */

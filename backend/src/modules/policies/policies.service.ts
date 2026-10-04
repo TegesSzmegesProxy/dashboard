@@ -28,11 +28,13 @@ import {
   StructuredPolicyV2,
 } from '../../contracts/policy/v2/policy.contract.js';
 import {
+  ENFORCEABLE_FIELD_LOCATIONS,
   POLICY_SCHEMA_V3,
   PolicyScopeName,
   PolicyToolV3,
   ScopePolicyV3,
   StructuredPolicyV3,
+  toolIssuesV3,
 } from '../../contracts/policy/v3/policy.contract.js';
 import { TOOL_REGISTRY_V2 } from '../../contracts/tools/v2/tool-registry.js';
 import { TOOL_REGISTRY_V3 } from '../../contracts/tools/v3/tool-registry.js';
@@ -611,6 +613,115 @@ export class PoliciesService implements OnModuleInit {
         compilationIssues: [],
         reviewWarnings: [
           ...this.inheritedWarnings(parent),
+          ...this.jevContextWarnings(policy),
+          ...this.overrideWarnings(compilation),
+        ],
+      }),
+    );
+  }
+
+  /**
+   * Drafts a `tessera.policy/v3` version from a `tessera.policy/v2` one
+   * (ADR-0021), so a v2 policy can reach a bundle. v2 tools carry no
+   * configuration, so a tool is kept only where the proxy accepts it with its
+   * defaults (empty configuration) and where it can run; every dropped tool is
+   * listed as a review warning. The draft is pending and must be approved.
+   */
+  async upgradeToV3(
+    organizationId: string,
+    tenantId: string,
+    version: string,
+    actorSubject: string,
+  ): Promise<PolicyVersionView> {
+    const parent = await this.findVersion(organizationId, tenantId, version);
+    if (parent.schemaVersion !== POLICY_SCHEMA_V2) {
+      throw new ConflictException(
+        `Only tessera.policy/v2 versions can be upgraded; this is ${parent.schemaVersion}`,
+      );
+    }
+    const warnings: ReviewWarning[] = [];
+    const keep = (
+      tools: { toolId: string }[],
+      scope: 'field' | 'file' | 'full',
+      enforceable: boolean,
+      endpoint: string,
+      field: string | null,
+    ): PolicyToolV3[] =>
+      tools.flatMap(({ toolId }) => {
+        const tool: PolicyToolV3 = { toolId, config: {} };
+        const issues = enforceable ? toolIssuesV3(tool, scope, 'tool') : [];
+        if (enforceable && issues.length === 0) return [tool];
+        warnings.push({
+          kind: 'upgrade',
+          endpoint,
+          field,
+          message: enforceable
+            ? `Tool ${toolId} was dropped in the upgrade to v3: it needs a configuration that v2 does not carry.`
+            : `Tool ${toolId} was dropped in the upgrade to v3: the proxy cannot run it on this field location.`,
+        });
+        return [];
+      });
+    const emptyScope = {
+      humanReadablePolicy: '',
+      requestTools: [],
+      fieldTools: [],
+      jevContext: null,
+    };
+    const policy: StructuredPolicyV3 = {
+      schemaVersion: POLICY_SCHEMA_V3,
+      toolRegistryVersion: TOOL_REGISTRY_V3,
+      global: { ...emptyScope },
+      environment: { ...emptyScope, environmentSnapshotId: null },
+      endpoints: parent.structuredPolicy.endpoints.map((endpoint) => {
+        const key = endpointKey(endpoint);
+        return {
+          method: endpoint.method,
+          path: endpoint.path,
+          humanReadablePolicy: endpoint.humanReadablePolicy,
+          requestTools: keep(endpoint.requestTools, 'full', true, key, null),
+          jevContext: endpoint.jevContext,
+          fields: endpoint.fields.map((field) => ({
+            name: field.name,
+            location: field.location,
+            type: field.type,
+            required: field.required,
+            humanReadablePolicy: field.humanReadablePolicy,
+            tools: keep(
+              field.tools,
+              field.location === 'file' ? 'file' : 'field',
+              field.location === 'file' ||
+                ENFORCEABLE_FIELD_LOCATIONS.has(field.location),
+              key,
+              `${field.location}:${field.name}`,
+            ),
+            jevContext: field.jevContext,
+          })),
+        };
+      }),
+    };
+    const compilation = this.compiler.compileV3(policy);
+    this.assertDraftable([
+      ...this.secretPaths(policy),
+      ...(compilation.ok ? [] : compilation.issues),
+    ]);
+    if (!compilation.ok) throw new Error('Unreachable: issues were reported');
+    return this.insertDraft(
+      organizationId,
+      tenantId,
+      parent,
+      policy,
+      actorSubject,
+      (base): PolicyVersionV3Document => ({
+        ...base,
+        schemaVersion: POLICY_SCHEMA_V3,
+        toolRegistryVersion: TOOL_REGISTRY_V3,
+        structuredPolicy: policy,
+        compiledPolicy: compilation.compiledPolicy,
+        compilationStatus: 'compiled',
+        compilationIssues: [],
+        reviewWarnings: [
+          ...this.inheritedWarnings(parent),
+          ...warnings,
           ...this.jevContextWarnings(policy),
           ...this.overrideWarnings(compilation),
         ],

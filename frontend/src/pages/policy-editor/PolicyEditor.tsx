@@ -95,6 +95,13 @@ export function PolicyEditor({ p, path, tenantId, reload, onOpenVersion, endpoin
       { approve: 'Policy approved', reject: 'Policy rejected', activate: 'Policy activated' }[action])
       .then((ok) => { if (ok) { setDialog(null); reload(); } });
 
+  const upgrade = async () => {
+    let upgraded: { version: string } | undefined;
+    const ok = await run.go(async () => { upgraded = await api<{ version: string }>(`${path}/policies/${encodeURIComponent(p.version)}/upgrade-v3`, { method: 'POST' }); },
+      'Draft created. Review and approve it, then activate.');
+    if (ok && upgraded) onOpenVersion(upgraded.version);
+  };
+
   const parentVersion = p.origin.kind === 'draft' ? p.origin.parentVersion : null;
   const attention = [...new Set([...draft.uncompiled, ...draft.staleText])];
   const uncompiled = editing ? draft.uncompiled.length : 0;
@@ -145,8 +152,8 @@ export function PolicyEditor({ p, path, tenantId, reload, onOpenVersion, endpoin
                 </>}
                 {p.state === 'APPROVED' && (p.activatable
                   ? <Button iconRight="arrow-right" onClick={() => setDialog('activate')}>Activate</Button>
-                  : <Tooltip label="No bundle schema carries tessera.policy/v2. Run a new analysis to get a tessera.policy/v3 version, which can be activated.">
-                    <span><Button iconRight="arrow-right" disabled>Activate</Button></span>
+                  : <Tooltip label="tessera.policy/v2 cannot be distributed. Upgrading drafts a tessera.policy/v3 version for review; tools that need a configuration v2 does not carry are dropped and listed.">
+                    <span><Button iconLeft="layers" disabled={run.pending} onClick={() => void upgrade()}>Upgrade to v3</Button></span>
                   </Tooltip>)}
               </div>
             )}

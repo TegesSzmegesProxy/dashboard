@@ -203,7 +203,7 @@ export type EndpointStructuredPolicy = StructuredPolicyV2 | StructuredPolicyV3;
 export const POLICY_V2_LIMITS = { endpointText: 2000, fieldText: 500, endpointJev: 1500, fieldJev: 500 } as const;
 
 export interface ReviewWarning {
-  kind: 'analysis' | 'jev_context' | 'scope_override';
+  kind: 'analysis' | 'jev_context' | 'scope_override' | 'upgrade';
   /** `METHOD path`, or `global` / `environment` for a scope */
   endpoint: string;
   /** `location:name`, or null for the endpoint */

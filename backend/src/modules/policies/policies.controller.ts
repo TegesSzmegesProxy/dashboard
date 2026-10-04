@@ -81,6 +81,21 @@ export class PoliciesController {
     );
   }
 
+  /** Drafts a pending `tessera.policy/v3` version from a v2 one so it can be activated. */
+  @Post(':version/upgrade-v3')
+  @RequireOrganizationRoles('owner', 'admin')
+  upgradeToV3(
+    @Param() params: PolicyVersionParamsDto,
+    @CurrentPrincipal() principal: DashboardPrincipal,
+  ): Promise<PolicyVersionView> {
+    return this.policies.upgradeToV3(
+      params.organizationId,
+      params.tenantId,
+      params.version,
+      principal.subject,
+    );
+  }
+
   @Get()
   @RequireOrganizationRoles('owner', 'admin', 'viewer')
   list(
