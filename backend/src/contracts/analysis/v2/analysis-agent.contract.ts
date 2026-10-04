@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -308,29 +308,42 @@ export class SubmitEndpointDto {
   endpoint!: EndpointFindingDto | null;
 }
 
+/**
+ * Local models sometimes ignore the strict schema and send a single string
+ * where a list is required. Wrapping it loses nothing; validation still runs.
+ */
+const stringOrList = () =>
+  Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? [value] : value,
+  );
+
 export class DossierDto {
   @IsString()
   @MaxLength(3_000)
   summary!: string;
 
+  @stringOrList()
   @IsArray()
   @ArrayMaxSize(20)
   @IsString({ each: true })
   @MaxLength(100, { each: true })
   languages!: string[];
 
+  @stringOrList()
   @IsArray()
   @ArrayMaxSize(20)
   @IsString({ each: true })
   @MaxLength(100, { each: true })
   frameworks!: string[];
 
+  @stringOrList()
   @IsArray()
   @ArrayMaxSize(50)
   @IsString({ each: true })
   @MaxLength(LIST, { each: true })
   routePrefixes!: string[];
 
+  @stringOrList()
   @IsArray()
   @ArrayMaxSize(50)
   @IsString({ each: true })
@@ -341,6 +354,7 @@ export class DossierDto {
   @MaxLength(1_000)
   authentication!: string;
 
+  @stringOrList()
   @IsArray()
   @ArrayMaxSize(30)
   @IsString({ each: true })
@@ -351,6 +365,7 @@ export class DossierDto {
   @MaxLength(1_000)
   errorHandling!: string;
 
+  @stringOrList()
   @IsArray()
   @ArrayMaxSize(30)
   @IsString({ each: true })

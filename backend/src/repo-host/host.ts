@@ -167,10 +167,12 @@ export class RepoHost {
   }
 
   private listFiles(params: Record<string, unknown>) {
-    const directory = this.optionalString(params, 'directory', 1_024)?.replace(
-      /\/$/,
-      '',
-    );
+    // Models pass "." or "./src/" for the root or a folder; stored paths are
+    // repository-relative without a leading "./".
+    const directory = this.optionalString(params, 'directory', 1_024)
+      ?.replace(/^(\.\/)+/, '')
+      .replace(/^\.$/, '')
+      .replace(/\/+$/, '');
     const glob = this.optionalString(params, 'glob', 200);
     const offset = this.integer(params, 'offset', 0, 1_000_000);
     const limit = Math.min(

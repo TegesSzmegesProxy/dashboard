@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { plainToInstance } from 'class-transformer';
-import { validate } from 'class-validator';
+import { validate, type ValidationError } from 'class-validator';
 import { randomBytes } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 import {
@@ -584,6 +584,8 @@ export class AnalysisPipeline {
             routeLike.map((file) => file.path).join('\n') || '(none)',
         }),
         submitTools: ['submit_recon'],
+        checkSubmission: (_tool, input) =>
+          submissionProblem(SubmitReconDto, input),
         execute: (name, input) => executor.execute(name, input),
       });
       const recon =
@@ -600,6 +602,11 @@ export class AnalysisPipeline {
         );
         await this.insertCandidates(job, this.fromRecon(recon.candidates), 1);
       } else {
+        if (run.outcome.kind === 'stopped') {
+          validationLogger.warn(
+            `Recon stopped: ${run.outcome.code} after ${run.turns} turns, ${run.toolCalls} tool calls`,
+          );
+        }
         job.dossier = this.fallbackDossier(index);
         job.routeRules = [];
         recorder.record(
@@ -679,6 +686,8 @@ export class AnalysisPipeline {
           dataBlocks,
           task,
           submitTools: ['submit_endpoint'],
+          checkSubmission: (_tool, input) =>
+            submissionProblem(SubmitEndpointDto, input),
           execute: (name, input) => executor.execute(name, input),
         }),
     );
@@ -746,6 +755,8 @@ export class AnalysisPipeline {
                 .join('\n') || '(none)',
           }),
           submitTools: ['submit_sweep'],
+          checkSubmission: (_tool, input) =>
+            submissionProblem(SubmitSweepDto, input),
           execute: (name, input) => executor.execute(name, input),
         });
         const sweep =
@@ -776,6 +787,8 @@ export class AnalysisPipeline {
                 dataBlocks,
                 task,
                 submitTools: ['submit_endpoint'],
+                checkSubmission: (_tool, input) =>
+                  submissionProblem(SubmitEndpointDto, input),
                 execute: (name, input) => executor.execute(name, input),
               }),
           );
@@ -1165,17 +1178,67 @@ function priorityOf(candidate: RouteCandidate, base: number): number {
   return Math.min(best, base) * 10 - Math.min(candidate.sources.length, 9);
 }
 
-async function validated<T extends object>(
+const validationLogger = new Logger('AgentOutput');
+
+/** Property paths and constraint names only; never the offending values. */
+function describeErrors(errors: ValidationError[], prefix = ''): string[] {
+  return errors.flatMap((error) => {
+    const path = `${prefix}${error.property}`;
+    return [
+      ...Object.keys(error.constraints ?? {}).map(
+        (constraint) => `${path} (${constraint})`,
+      ),
+      ...describeErrors(error.children ?? [], `${path}.`),
+    ];
+  });
+}
+
+type Checked<T> = { value: T } | { issues: string };
+
+async function check<T extends object>(
   type: new () => T,
   value: unknown,
-): Promise<T | null> {
-  if (typeof value !== 'object' || value === null) return null;
-  const instance = plainToInstance(type, value);
+): Promise<Checked<T>> {
+  let candidate = value;
+  if (typeof candidate === 'string') {
+    // Some local models return tool arguments as a JSON string.
+    try {
+      candidate = JSON.parse(candidate) as unknown;
+    } catch {
+      candidate = null;
+    }
+  }
+  if (typeof candidate !== 'object' || candidate === null) {
+    return { issues: 'the arguments are not a JSON object' };
+  }
+  const instance = plainToInstance(type, candidate);
   const errors = await validate(instance, {
     whitelist: true,
     forbidNonWhitelisted: true,
   });
-  return errors.length === 0
-    ? (JSON.parse(JSON.stringify(instance)) as T)
-    : null;
+  if (errors.length > 0) {
+    return { issues: describeErrors(errors).slice(0, 15).join(', ') };
+  }
+  return { value: JSON.parse(JSON.stringify(instance)) as T };
+}
+
+/** Rejection text for the model, or null when the submission is valid. */
+async function submissionProblem<T extends object>(
+  type: new () => T,
+  value: unknown,
+): Promise<string | null> {
+  const checked = await check(type, value);
+  if ('issues' in checked) {
+    validationLogger.warn(`${type.name} rejected: ${checked.issues}`);
+    return checked.issues;
+  }
+  return null;
+}
+
+async function validated<T extends object>(
+  type: new () => T,
+  value: unknown,
+): Promise<T | null> {
+  const checked = await check(type, value);
+  return 'value' in checked ? checked.value : null;
 }

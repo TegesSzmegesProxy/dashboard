@@ -55,6 +55,12 @@ export interface AgentRunOptions {
   task: string;
   submitTools: readonly string[];
   execute: (name: string, input: unknown) => Promise<ToolExecution>;
+  /**
+   * Returns a description of what is wrong with a submission, or null when it
+   * is acceptable. A rejected submission goes back to the model as a tool
+   * error so it can correct it (bounded by MAX_REPAIRS).
+   */
+  checkSubmission?: (tool: string, input: unknown) => Promise<string | null>;
   limits: AgentLimits;
   budget: BudgetGuard;
 }
@@ -65,6 +71,7 @@ const BETAS: Anthropic.Beta.AnthropicBeta[] = [
   'task-budgets-2026-03-13',
 ];
 const MAX_NUDGES = 2;
+const MAX_REPAIRS = 2;
 
 /** Infrastructure failures (e.g. a crashed sandbox) end the run. */
 function isFatal(error: unknown): boolean {
@@ -93,6 +100,7 @@ export async function runAgent(
   let cost = 0;
   let toolCalls = 0;
   let nudges = 0;
+  let repairs = 0;
   let repeatTurns = 0;
   let toolLimitTurn = 0;
 
@@ -182,6 +190,26 @@ export async function runAgent(
       options.submitTools.includes(call.name),
     );
     if (submission) {
+      const problem =
+        options.checkSubmission && repairs < MAX_REPAIRS
+          ? await options.checkSubmission(submission.name, submission.input)
+          : null;
+      if (problem) {
+        repairs++;
+        messages.push({
+          role: 'user',
+          content: calls.map((call) => ({
+            type: 'tool_result',
+            tool_use_id: call.id,
+            content:
+              call === submission
+                ? `Submission rejected: ${problem}. Call ${submission.name} again with arguments that match the schema exactly (correct types, no extra properties).`
+                : 'Not executed; fix the submission first.',
+            is_error: true,
+          })),
+        });
+        continue;
+      }
       return result(
         { kind: 'submitted', tool: submission.name, input: submission.input },
         turn,
