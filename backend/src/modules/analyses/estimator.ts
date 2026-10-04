@@ -1,10 +1,15 @@
 import type { PriceTable } from '../../infrastructure/ai/pricing.js';
 import type { AnalysisEstimate, RangeEstimate } from './analysis.types.js';
+import { renderToolRegistry } from './prompts/shared.js';
 
 /** Rough tokens per byte of source code. */
 const TOKENS_PER_BYTE = 1 / 3.5;
-/** System prompt, tool schemas, dossier and environment block. */
-const PREFIX_TOKENS = 14_000;
+/**
+ * System prompt, tool schemas, dossier, environment and scope blocks; the
+ * `tessera.tools/v3` documentation is a large, fixed part of it.
+ */
+const PREFIX_TOKENS =
+  14_000 + Math.ceil(renderToolRegistry().length * TOKENS_PER_BYTE);
 const ITEM_READ_CAP_TOKENS = 30_000;
 
 interface Profile {
@@ -103,8 +108,13 @@ export function estimateAnalysis(
     const item = run(profile, averageFileTokens + profile.extraReadTokens);
     const recon = run({ ...profile, turns: profile.turns * 2 }, 40_000);
     const sweep = run(profile, Math.min(60, input.routeLikeFiles) * 1_500);
+    // Runs only with an environment snapshot; counted always, to stay on the safe side.
+    const environmentPolicy = run(profile, 10_000);
     const total = (part: 'cacheRead' | 'cacheWrite' | 'input' | 'output') =>
-      item[part] * items[level] + recon[part] + sweep[part];
+      item[part] * items[level] +
+      recon[part] +
+      sweep[part] +
+      environmentPolicy[part];
     const inputTokens =
       total('cacheRead') + total('cacheWrite') + total('input');
     const outputTokens = total('output');

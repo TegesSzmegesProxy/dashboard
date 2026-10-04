@@ -63,8 +63,9 @@ trusted as authorization.
 - `EnvironmentSnapshot`: one redacted `tessera -get-environment` result;
   the latest N per tenant are kept (ADR-0016).
 - `Analysis`: immutable version, estimate, budget and usage, dossier, route
-  rules, evidence-backed endpoint facts, coverage, AI read manifest and a
-  pending `tessera.policy/v2` proposal. Its work items are separate documents.
+  rules, global and environment scope records, evidence-backed endpoint
+  facts, coverage, AI read manifest and a pending `tessera.policy/v3`
+  proposal. Its work items are separate documents.
 - `AiCredential`: an organization's provider key reference and fingerprint;
   the key itself is in the secret store (ADR-0015).
 - `PolicyVersion`: immutable human intent, structured intent, compilation state,
@@ -316,22 +317,35 @@ budget enforcement, coverage gate, reconciliation and environment ingestion.
 Not yet exercised: the Docker sandbox (no Docker access in development), a live
 GitHub App and a real model.
 
-M7 is partly implemented:
-- `tessera.policy/v2` versions are committed with their analysis, with field
-  human-readable policies.
-- The policy editor saves drafts as new pending versions
-  (`POST policies/v2`).
-- Approval and rejection work for v2, as does the standing approval of
-  ADR-0018.
-- `POST policies/v2/compile` exists, but the compiler is a placeholder (TODO in
-  `PolicyGenerationService.compileHumanReadablePolicy`) that does not
-  regenerate tools.
-- Activation of v2 returns `BUNDLE_SCHEMA_UNAVAILABLE`.
+M7 is mostly implemented (ADR-0021):
+- Analyses propose `tessera.policy/v3`:
+  - a global scope from the recon agent;
+  - an environment scope from an environment-policy agent step, skipped
+    without a snapshot;
+  - endpoints, with `tessera.tools/v3` tools whose configurations are
+    validated against the vendored registry.
+- `PolicyCompilerService.compileV3` produces the steps and JEV context of a
+  `tessera.bundle/v3`, reporting scope overrides as review warnings.
+- v3 drafts are saved with `POST policies/v3`; v2 drafts still use
+  `POST policies/v2`.
+- Approval, the standing approval of ADR-0018, and activation work for v3.
+  Activation builds and signs `tessera.bundle/v3`.
+- v2 versions cannot be activated (`BUNDLE_SCHEMA_UNAVAILABLE`); a new
+  analysis replaces them.
+- `POST policies/v2/compile` is still a placeholder (TODO in
+  `PolicyGenerationService.compileHumanReadablePolicy`); the v3 editor
+  produces the same placeholder result locally.
+- Verified with lint, typecheck, a `tsc` build and a scratch cross-repository
+  run:
+  1. A dashboard-compiled, dashboard-signed v3 bundle was served to
+     `tessera fetch`, verified, stored in Redis and loaded by the proxy.
+  2. The proxy enforced the global, environment and endpoint steps.
+  3. Not exercised: an analysis with a real model and activation through
+     MongoDB.
 
 Next:
-- M7: the per-endpoint `endpoint_edit` compiler behind `policies/v2/compile`,
-  and the bundle schema for policy v2 (not `tessera.bundle/v2`, see
-  ADR-0014).
+- M7: the per-endpoint `endpoint_edit` compiler; editing tool settings and
+  scope policies in the dashboard editor.
 - M9: verification pass and incremental re-analysis.
 - Analysis does not set endpoint `sampling` yet.
 
@@ -380,10 +394,9 @@ only after an explicit project decision changes this policy.
    classification or policy generation), and how policy defaults and endpoint
    overrides (`review`, `mask`, `require`, thresholds) map into policy
    generation or a future policy contract version.
-10. The `tessera.tools/v2` registry (ADR-0014) holds the 20 tools the proxy
-    implements, without configuration. Before policy v2 is distributed the
-    proxy must read the bundle schema that carries it and present JEV context
-    to JEV as data. Tool configuration is a later, joint contract change.
+10. Tool configuration, the `tessera.tools/v3` registry, scoped policies and
+    `tessera.bundle/v3` are decided by ADR-0021. Proxies obtain bundles only
+    through `tessera fetch` and present JEV context to JEV as data.
 11. Environment context comes from snapshots the customer uploads with
     `tessera -get-environment` (httpx, Lynis, nmap, nuclei, Trivy), stored in
     MongoDB (ADR-0016). Without one, analyses run and tell the user to run the

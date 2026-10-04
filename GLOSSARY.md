@@ -51,6 +51,21 @@
   and compilation state. Editing creates a new version.
 - **Endpoint policy**: one endpoint of a policy version: its endpoint-level
   tools, JEV context, fields and human-readable policy.
+- **Policy scope**: where a rule of a `tessera.policy/v3` version applies:
+  `global`, `environment` or one endpoint. When a tool and target appear in
+  more than one scope, the most specific one runs (ADR-0021).
+- **Global policy**: the scope for rules derived from code that shapes the
+  whole application (middleware, parsers, framework limits). It applies to
+  every request, including endpoints no endpoint policy lists.
+- **Environment policy**: the scope for rules derived from an environment
+  snapshot (scanner findings, vulnerable packages, exposed services). It
+  applies to every request and records the snapshot it came from.
+- **Tool configuration**: the settings of one selected tool, validated
+  against the tool's schema in `tessera.tools/v3`. An empty configuration
+  uses the proxy's defaults.
+- **Operator-configured tool**: a tool whose configuration is secret material
+  or a data feed (keys, cookie secrets, GeoIP or reputation tables). No
+  policy may select it; it is configured with the proxy deployment.
 - **Human-readable policy**: the administrator-editable plain-language
   description of one endpoint policy or one of its fields. It is never
   enforced. Editing it compiles it into that endpoint's structured policy,
@@ -85,17 +100,22 @@
 - **Runtime decision settings**: the tenant's explicit sampling bounds, JEV
   threshold and floor, and separate actions for static-analysis errors and
   unavailable JEV. They travel in bundle v2; `failureBehavior` alone does not
-  define them.
+  define them. Bundle v3 carries them unchanged.
 - **Active version**: the bundle selected by the control plane for distribution.
   It can differ from the version currently loaded by a running proxy.
 - **Loaded version**: the verified bundle currently used by a proxy process.
+- **Policy fetch**: `tessera fetch`, the operator command that pulls the
+  active bundle, verifies it, builds its tools and stores it in the proxy's
+  Redis. It is the only way a proxy obtains a bundle (ADR-0021).
 - **Restart required**: a proxy state shown in the dashboard when a compatible
-  proxy's loaded version differs from the active version. Proxies never
-  hot-swap bundles; a restart loads the active version.
+  proxy's loaded version differs from the active version. A running proxy
+  switches to a fetched bundle by itself, unless the bundle changes the
+  upstream; then a restart applies it.
 - **Heartbeat**: a proxy's periodic report of its loaded versions, supported
   bundle schemas and tool registries, and health. It is display state only.
-- **Last known good**: the most recent bundle a proxy successfully verified and
-  persisted for use during control-plane outages or invalid pulls.
+- **Last known good**: the most recent bundle a policy fetch verified and
+  stored in the proxy's Redis. The proxy runs it during control-plane outages,
+  and a failed fetch never replaces it.
 - **Deployment key**: a revocable credential used by a proxy to pull bundles
   for an explicit set of tenants and report health/telemetry.
 - **Collector key**: a revocable credential limited to analysis uploads for an

@@ -7,7 +7,9 @@ import { ObjectId } from 'mongodb';
 import {
   CandidateDto,
   DossierDto,
+  ScopePolicySubmissionDto,
   SubmitEndpointDto,
+  SubmitEnvironmentPolicyDto,
   SubmitReconDto,
   SubmitSweepDto,
 } from '../../contracts/analysis/v2/analysis-agent.contract.js';
@@ -49,11 +51,13 @@ import { AnalysesService } from './analyses.service.js';
 import type {
   AnalysisDocument,
   AnalysisEnvironmentInfo,
+  AnalysisScopes,
   AnalysisStep,
   AnalysisStepName,
   AnalysisUsage,
   CoverageSummary,
   IndexSummary,
+  ScopeRecord,
   WorkItemDocument,
 } from './analysis.types.js';
 import { EnvironmentContext } from './environment-context.js';
@@ -62,6 +66,10 @@ import {
   ENDPOINT_SYSTEM_PROMPT,
   renderEndpointTask,
 } from './prompts/endpoint.prompt.js';
+import {
+  ENVIRONMENT_SYSTEM_PROMPT,
+  renderEnvironmentTask,
+} from './prompts/environment.prompt.js';
 import {
   RECON_SYSTEM_PROMPT,
   renderReconTask,
@@ -77,10 +85,13 @@ import {
   InvalidEndpointError,
   mergeEndpoints,
   ReconcileCounters,
+  scopeEvidencePaths,
   toEndpointRecord,
+  toScopeRecord,
 } from './reconcile.js';
 import {
   ENDPOINT_TOOLS,
+  ENVIRONMENT_TOOLS,
   ReadManifestRecorder,
   RECON_TOOLS,
   RepoToolExecutor,
@@ -515,8 +526,31 @@ export class AnalysisPipeline {
           'environment',
           'No environment snapshot was collected for this application.',
         );
+    const counters: ReconcileCounters = {
+      discardedEvidence: 0,
+      downgradedFindings: 0,
+    };
+    const scopes: AnalysisScopes = job.scopes ?? {
+      global: null,
+      environment: null,
+      environmentSnapshotId: job.environment.snapshotId,
+    };
+    const scopeRecord = async (
+      submission: ScopePolicySubmissionDto,
+      scope: 'global' | 'environment',
+    ): Promise<ScopeRecord> => {
+      const stats = await session.call<FileStat[]>('file_stats', {
+        paths: scopeEvidencePaths(submission),
+      });
+      return toScopeRecord(
+        submission,
+        scope,
+        new Map(stats.map((stat) => [stat.path, stat.lines])),
+        counters,
+      );
+    };
     const track = async (
-      step: 'recon' | 'endpoints' | 'sweep',
+      step: 'recon' | 'environment_policy' | 'endpoints' | 'sweep',
       run: AgentRunResult,
     ) => {
       usage.usd = budget.spentUsd;
@@ -529,7 +563,7 @@ export class AnalysisPipeline {
       });
     };
     const agent = (
-      step: 'recon' | 'endpoints' | 'sweep',
+      step: 'recon' | 'environment_policy' | 'endpoints' | 'sweep',
       options: Omit<
         Parameters<typeof runAgent>[0],
         'client' | 'model' | 'effort' | 'limits' | 'budget'
@@ -595,10 +629,13 @@ export class AnalysisPipeline {
       if (recon) {
         job.dossier = recon.dossier;
         job.routeRules = recon.routeRules;
+        scopes.global = recon.globalPolicy
+          ? await scopeRecord(recon.globalPolicy, 'global')
+          : null;
         recorder.record(
           'recon',
           'succeeded',
-          `${recon.routeRules.length} route rules, ${recon.candidates.length} extra candidates`,
+          `${recon.routeRules.length} route rules, ${recon.candidates.length} extra candidates, ${scopes.global ? scopes.global.requestTools.length + scopes.global.fieldTools.length : 'no'} global tools`,
         );
         await this.insertCandidates(job, this.fromRecon(recon.candidates), 1);
       } else {
@@ -616,10 +653,76 @@ export class AnalysisPipeline {
           run.outcome.kind === 'stopped' ? run.outcome.code : 'INVALID_OUTPUT',
         );
       }
+      job.scopes = scopes;
       await this.analyses.updateLeased(job._id, leaseOwner, {
         dossier: job.dossier,
         routeRules: job.routeRules,
+        scopes,
         environment: job.environment,
+        steps: recorder.steps,
+      });
+    }
+
+    // Environment policy: protections the environment snapshot calls for (ADR-0021).
+    if (!recorder.succeeded('environment_policy')) {
+      recorder.start();
+      if (!environment) {
+        recorder.record(
+          'environment_policy',
+          'skipped',
+          'No environment snapshot; run `tessera --analyze-env` to collect one',
+          'ENVIRONMENT_NOT_COLLECTED',
+        );
+      } else if (budget.exhausted) {
+        recorder.record(
+          'environment_policy',
+          'skipped',
+          'Budget exhausted before the environment policy',
+          'BUDGET_EXHAUSTED',
+        );
+      } else {
+        const executor = new RepoToolExecutor(session, manifest);
+        const run = await agent('environment_policy', {
+          system: ENVIRONMENT_SYSTEM_PROMPT,
+          tools: ENVIRONMENT_TOOLS,
+          dataBlocks: [
+            dataBlockPreamble(boundary),
+            dataBlock(boundary, 'application dossier', job.dossier),
+            environmentBlock,
+          ],
+          task: renderEnvironmentTask(),
+          submitTools: ['submit_environment_policy'],
+          execute: (name, input) => executor.execute(name, input),
+        });
+        const submitted =
+          run.outcome.kind === 'submitted'
+            ? await validated(SubmitEnvironmentPolicyDto, run.outcome.input)
+            : null;
+        if (submitted) {
+          scopes.environment = await scopeRecord(
+            submitted.environmentPolicy,
+            'environment',
+          );
+          scopes.environmentSnapshotId = job.environment.snapshotId;
+          recorder.record(
+            'environment_policy',
+            'succeeded',
+            `${scopes.environment.requestTools.length + scopes.environment.fieldTools.length} environment tools`,
+          );
+        } else {
+          recorder.record(
+            'environment_policy',
+            'failed',
+            'The environment policy agent did not produce a valid result',
+            run.outcome.kind === 'stopped'
+              ? run.outcome.code
+              : 'INVALID_OUTPUT',
+          );
+        }
+      }
+      job.scopes = scopes;
+      await this.analyses.updateLeased(job._id, leaseOwner, {
+        scopes,
         steps: recorder.steps,
       });
     }
@@ -665,11 +768,11 @@ export class AnalysisPipeline {
       dataBlockPreamble(boundary),
       dataBlock(boundary, 'application dossier', job.dossier),
       environmentBlock,
+      dataBlock(boundary, 'scope policies', {
+        global: scopeSummary(scopes.global),
+        environment: scopeSummary(scopes.environment),
+      }),
     ];
-    const counters: ReconcileCounters = {
-      discardedEvidence: 0,
-      downgradedFindings: 0,
-    };
     recorder.start();
     await this.processWorkItems(
       job,
@@ -839,7 +942,8 @@ export class AnalysisPipeline {
     );
     job.results = {
       endpoints: merged.endpoints,
-      policyProposal: buildPolicyProposal(merged.endpoints),
+      scopes,
+      policyProposal: buildPolicyProposal(merged.endpoints, scopes),
       coverage,
       attribution: counters,
     };
@@ -1163,6 +1267,22 @@ export class AnalysisPipeline {
       steps: recorder.steps,
     });
   }
+}
+
+/** What endpoint agents need to know about scope policies: tools and settings, no rationale. */
+function scopeSummary(record: ScopeRecord | null) {
+  if (!record) return null;
+  return {
+    requestTools: record.requestTools.map((tool) => ({
+      toolId: tool.toolId,
+      config: tool.config ?? {},
+    })),
+    fieldTools: record.fieldTools.map((tool) => ({
+      toolId: tool.toolId,
+      locations: tool.locations,
+      config: tool.config ?? {},
+    })),
+  };
 }
 
 function isStrong(candidate: RouteCandidate): boolean {

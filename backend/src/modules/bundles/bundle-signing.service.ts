@@ -15,6 +15,7 @@ import {
   BundleSignatureV1,
 } from '../../contracts/bundle/v1/bundle.contract.js';
 import type { ActiveBundleV2Payload } from '../../contracts/bundle/v2/bundle.contract.js';
+import type { ActiveBundleV3Payload } from '../../contracts/bundle/v3/bundle.contract.js';
 
 @Injectable()
 export class BundleSigningService {
@@ -45,7 +46,7 @@ export class BundleSigningService {
   }
 
   /** Returns the canonical payload bytes that were signed, plus the signature. */
-  sign(payload: ActiveBundleV2Payload): {
+  sign(payload: ActiveBundleV2Payload | ActiveBundleV3Payload): {
     canonicalPayload: string;
     signature: BundleSignatureV1;
   } {

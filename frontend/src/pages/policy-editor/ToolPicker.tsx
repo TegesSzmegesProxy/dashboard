@@ -10,6 +10,10 @@ const CATEGORY: Record<ToolCategory, string> = {
   url: 'URLs',
   resource: 'Size and rate',
   anomaly: 'Abuse patterns',
+  auth: 'Authentication',
+  bot: 'Bots and scanners',
+  data_leakage: 'Data leakage',
+  protocol: 'HTTP protocol',
 };
 
 /**
@@ -19,7 +23,9 @@ const CATEGORY: Record<ToolCategory, string> = {
 export function ToolPicker({ target, selected, scope, choices }: { target: Target; selected: string[]; scope: ToolScope; choices: ToolChoice[] }) {
   const { tool, tools, editing, dispatch } = useEditor();
   const [open, setOpen] = useState(false);
-  const available = tools.filter((t) => t.scope === scope && !selected.includes(t.id));
+  // Settings cannot be edited here yet: offer only tools that run on their defaults.
+  const available = tools.filter((t) => t.scope === scope && !selected.includes(t.id) &&
+    t.aiSelectable !== false && (t.requiredSettings?.length ?? 0) === 0);
   const set = (toolId: string, on: boolean) => dispatch({ type: 'tool', target, toolId, on });
 
   return (

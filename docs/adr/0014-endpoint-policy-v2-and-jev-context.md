@@ -2,9 +2,10 @@
 
 ## Status
 
-Proposed. The policy shape, JEV context and tool set are decided. It becomes
-Accepted once the proxy reads the bundle schema that carries policy v2 and
-gives JEV context to JEV.
+Partly superseded by ADR-0021. Tool configuration, the `tessera.tools/v3`
+registry and the bundle schema (`tessera.bundle/v3`, which carries policy v3)
+are decided there. The endpoint and field shape, human-readable policy and JEV
+context rules below still apply to policy v3.
 
 ## Context
 

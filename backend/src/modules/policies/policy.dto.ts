@@ -17,6 +17,7 @@ import {
   StructuredPolicyV2Dto,
 } from '../../contracts/policy/v2/policy.contract.js';
 import type { FieldLocationV2 } from '../../contracts/policy/v2/policy.contract.js';
+import { StructuredPolicyV3Dto } from '../../contracts/policy/v3/policy.contract.js';
 import { TenantParamsDto } from '../projects/project.dto.js';
 
 export class PolicyVersionParamsDto extends TenantParamsDto {
@@ -56,6 +57,17 @@ export class SavePolicyDraftDto {
   @ValidateNested()
   @Type(() => StructuredPolicyV2Dto)
   structuredPolicy!: StructuredPolicyV2Dto;
+}
+
+export class SavePolicyDraftV3Dto {
+  @ApiProperty({ description: 'The version the draft was started from.' })
+  @Matches(/^[a-f0-9]{64}$/)
+  parentVersion!: string;
+
+  @ApiProperty({ type: StructuredPolicyV3Dto })
+  @ValidateNested()
+  @Type(() => StructuredPolicyV3Dto)
+  structuredPolicy!: StructuredPolicyV3Dto;
 }
 
 export class CompileTargetDto {

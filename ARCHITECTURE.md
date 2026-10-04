@@ -20,7 +20,7 @@ Dashboard user -> Frontend -> Control-plane API -> MongoDB / Redis / secret stor
                                     |
 Collector (customer CI/CLI) --------+  commit SHA + redacted environment results
                                     |
-Proxy (customer environment) -------+  bundle pull, heartbeat, redacted telemetry
+Proxy (customer environment) -------+  bundle fetch (`tessera fetch`), heartbeat, redacted telemetry
 
 Client traffic -> Proxy -> protected application
                  (the control plane is not on this path)
@@ -54,14 +54,16 @@ safe metadata; reveal plaintext once at creation.
 collector upload (commit SHA + environment results)
   -> source fetch from the bound repository into a disposable analysis sandbox
   -> agentic application analysis producing evidence-backed facts and a
-     pending endpoint policy (ADR-0013, ADR-0014)
+     pending scoped policy: global, environment and endpoint (ADR-0013,
+     ADR-0014, ADR-0021)
   -> per-endpoint natural-language edit (AI) or human import
   -> schema validation
   -> compilation against the supported tool registry
   -> human approval
   -> atomic activation
   -> canonical bundle signing
-  -> proxy pull and verification
+  -> operator-run `tessera fetch`: proxy pull, verification, storage in Redis
+  -> proxy loads (startup) or switches to (running) the stored bundle
 ```
 
 Each transition has explicit durable state. Policies, analyses, and activated
@@ -83,13 +85,27 @@ contract, tool identifiers, and tool configs before persisting or using the
 bundle. Secrets never belong in a bundle. Cross-repository contract evolution
 must account for proxies upgrading later than the hosted control plane.
 
-The current activation schema is `tessera.bundle/v2` (ADR-0012); existing v1
-bundles remain immutable and serve compatible proxies. Proxies pull it from
-`GET /api/v1/tenants/:tenantId/active-bundle` with a deployment key, declare
-the bundle schemas and tool registries they support in request headers, and
-poll with `If-None-Match`. They report loaded versions to
-`POST /api/v1/proxy/heartbeats`, so the dashboard can show `restart required`
-and incompatible proxies. Heartbeats never affect distribution.
+A `tessera.policy/v3` policy activates as `tessera.bundle/v3` (ADR-0021):
+- global and environment steps, which run on every request;
+- endpoint steps;
+- configured `tessera.tools/v3` tools;
+- JEV context.
+
+v1 policies still activate as `tessera.bundle/v2` (ADR-0012), and existing
+bundles remain immutable.
+
+A proxy fetches the active bundle only when an operator runs `tessera fetch`:
+1. The fetch calls `GET /api/v1/tenants/:tenantId/active-bundle` with a
+   deployment key, declaring the bundle schemas and tool registries it supports
+   in request headers, with `If-None-Match`.
+2. It verifies the bundle, builds every tool, and stores the signed bundle in
+   the proxy's Redis.
+3. Ingress verifies the stored bundle again at startup. It refuses to start
+   without one, and a running proxy switches to a newly fetched one.
+
+Proxies report loaded versions to `POST /api/v1/proxy/heartbeats`, so the
+dashboard can show proxies that have not fetched the active version and
+proxies that are incompatible. Heartbeats never affect distribution.
 
 Proxies send batched, redacted `tessera.telemetry/v1` counters to
 `POST /api/v1/proxy/telemetry` (ADR-0008). Endpoints are identified only by

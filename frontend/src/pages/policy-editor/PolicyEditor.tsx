@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
-import { useApi, useResource, type Analysis, type CompiledEndpoint, type PolicyVersionV2, type ToolRegistry } from '../../api';
+import { useApi, useResource, type Analysis, type CompiledEndpoint, type EndpointPolicyVersion, type ToolRegistry } from '../../api';
 import { Button, Card, Dialog, Tooltip } from '../../components';
 import { useOrg } from '../../Layout';
 import {
@@ -11,21 +11,22 @@ import { EditorContext, type EditorCtx } from './context';
 import { EndpointList } from './EndpointList';
 import { EndpointPanel } from './EndpointPanel';
 import { SaveDialog } from './SaveDialog';
+import { ScopePolicies } from './ScopePolicies';
 
 /**
- * Review and edit a `tessera.policy/v2` version. View mode is the default;
+ * Review and edit a `tessera.policy/v2` or `v3` version. View mode is the default;
  * editing works on a local draft that is saved as one new pending version, so
  * the version shown here never changes.
  */
 export function PolicyEditor({ p, path, tenantId, reload, onOpenVersion, endpoint, onEndpoint }: {
-  p: PolicyVersionV2; path: string; tenantId: string; reload: () => void;
+  p: EndpointPolicyVersion; path: string; tenantId: string; reload: () => void;
   onOpenVersion: (version: string) => void;
   endpoint: string | null; onEndpoint: (key: string) => void;
 }) {
   const { canEdit } = useOrg();
   const api = useApi();
   const run = useAction();
-  const registry = useResource<ToolRegistry>('/tool-registries/tessera.tools/v2');
+  const registry = useResource<ToolRegistry>(`/tool-registries/${p.toolRegistryVersion}`);
   const analysisId = p.origin.analysisId;
   const analysis = useResource<Analysis>(analysisId ? `${path}/analyses/${analysisId}` : null);
 
@@ -49,6 +50,15 @@ export function PolicyEditor({ p, path, tenantId, reload, onOpenVersion, endpoin
   const compile = useCallback(async (t: Target): Promise<CompiledEndpoint | null> => {
     const found = findTarget(draft.policy, t);
     if (!found) return null;
+    // The plain-language compiler only takes v2 endpoints and is still a
+    // placeholder that returns the checks unchanged; v3 gets the same result locally.
+    if (p.schemaVersion === 'tessera.policy/v3') {
+      return {
+        endpoint: found.endpoint,
+        limitations: ['The plain-language compiler is not available yet, so the checks were not regenerated from your text. Adjust the checks yourself so they match it.'],
+        mock: true,
+      };
+    }
     let result: CompiledEndpoint | null = null;
     await run.go(async () => {
       result = await api<CompiledEndpoint>(`${path}/policies/v2/compile`, {
@@ -61,7 +71,7 @@ export function PolicyEditor({ p, path, tenantId, reload, onOpenVersion, endpoin
       });
     });
     return result;
-  }, [api, draft.policy, p.version, path, run]);
+  }, [api, draft.policy, p.schemaVersion, p.version, path, run]);
 
   const ctx: EditorCtx = {
     tools, tool: (id) => toolMap.get(id), editing, dispatch, facts, compile,
@@ -135,13 +145,15 @@ export function PolicyEditor({ p, path, tenantId, reload, onOpenVersion, endpoin
                 </>}
                 {p.state === 'APPROVED' && (p.activatable
                   ? <Button iconRight="arrow-right" onClick={() => setDialog('activate')}>Activate</Button>
-                  : <Tooltip label="Proxies cannot load tessera.policy/v2 yet. Activation becomes available with the bundle schema that carries it.">
+                  : <Tooltip label="No bundle schema carries tessera.policy/v2. Run a new analysis to get a tessera.policy/v3 version, which can be activated.">
                     <span><Button iconRight="arrow-right" disabled>Activate</Button></span>
                   </Tooltip>)}
               </div>
             )}
           </div>
         </Section>
+
+        {p.schemaVersion === 'tessera.policy/v3' && <ScopePolicies policy={p.structuredPolicy} warnings={p.reviewWarnings} />}
 
         <Card aria-label="Endpoint policies">
           {!registry.data && !registry.error ? <Loading what="tool registry" /> : (
@@ -180,7 +192,7 @@ export function PolicyEditor({ p, path, tenantId, reload, onOpenVersion, endpoin
           onConfirm={(reason) => void lifecycle(dialog, dialog === 'reject' ? { reason } : undefined)} />
       )}
       <Dialog open={dialog === 'activate'} title={`Activate ${p.version.slice(0, 12)}…?`} onClose={() => setDialog(null)}
-        description="Tessera builds one signed bundle from this policy and the current runtime configuration, and selects it for distribution."
+        description="Tessera builds one signed bundle from this policy and the current runtime configuration, and selects it for distribution. Proxies apply it when an operator runs `tessera fetch`."
         actions={<>
           <Button variant="ghost" onClick={() => setDialog(null)}>Cancel</Button>
           <Button disabled={run.pending} onClick={() => void lifecycle('activate')}>Activate</Button>

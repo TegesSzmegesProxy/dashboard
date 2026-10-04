@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import type { StructuredPolicyV2 } from '../../api';
+import type { EndpointStructuredPolicy } from '../../api';
 import { Icon, Input, Tabs } from '../../components';
 import { endpointKey, fieldKey, parseTargetId, type Change } from '../../policy/draft';
 import { useEditor } from './context';
 
 /** Left rail: every endpoint with its change and review markers. */
-export function EndpointList({ policy, changes, selected, onSelect }: { policy: StructuredPolicyV2; changes: Change[]; selected: string; onSelect: (key: string) => void }) {
+export function EndpointList({ policy, changes, selected, onSelect }: { policy: EndpointStructuredPolicy; changes: Change[]; selected: string; onSelect: (key: string) => void }) {
   const { draft, warnings, editing } = useEditor();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');

@@ -14,7 +14,10 @@ import type {
   FieldLocationV2,
   StructuredPolicyV2,
 } from '../../contracts/policy/v2/policy.contract.js';
-import type { ToolId } from '../../contracts/tools/v2/tool-registry.js';
+import type {
+  ScopeFieldLocation,
+  StructuredPolicyV3,
+} from '../../contracts/policy/v3/policy.contract.js';
 import type { AnalysisAiStatus } from '../../infrastructure/ai/analysis-ai.service.js';
 import type { TokenUsage } from '../../infrastructure/ai/pricing.js';
 import type {
@@ -43,6 +46,7 @@ export type AnalysisStepName =
   | 'environment'
   | 'estimate'
   | 'recon'
+  | 'environment_policy'
   | 'route_rules'
   | 'endpoints'
   | 'sweep'
@@ -105,7 +109,9 @@ export interface AnalysisBudget {
 export interface AnalysisUsage {
   usd: number;
   tokens: TokenUsage;
-  byStep: Partial<Record<'recon' | 'endpoints' | 'sweep', number>>;
+  byStep: Partial<
+    Record<'recon' | 'environment_policy' | 'endpoints' | 'sweep', number>
+  >;
   models: string[];
 }
 
@@ -145,9 +151,35 @@ export interface Evidence {
 }
 
 export interface ToolChoice {
-  toolId: ToolId;
+  /** A `tessera.tools/v3` tool; `tessera.tools/v2` on analyses from before ADR-0021. */
+  toolId: string;
   basis: EvidenceBasis;
   rationale: string;
+  /** Validated against the tool's schema; absent on analyses from before ADR-0021. */
+  config?: Record<string, unknown>;
+}
+
+/**
+ * Reconciled global or environment policies (ADR-0021). Global policies come
+ * from cross-cutting code, environment policies from the environment
+ * snapshot; both apply to every request.
+ */
+export interface ScopeRecord {
+  humanReadablePolicy: string;
+  requestTools: ToolChoice[];
+  fieldTools: (ToolChoice & { locations: ScopeFieldLocation[] })[];
+  jevContext: string | null;
+  evidence: Evidence[];
+  limitations: string[];
+  /** Review warnings from reconciliation. */
+  warnings: string[];
+}
+
+export interface AnalysisScopes {
+  global: ScopeRecord | null;
+  environment: ScopeRecord | null;
+  /** The snapshot the environment scope was derived from. */
+  environmentSnapshotId: string | null;
 }
 
 export interface EndpointField {
@@ -215,7 +247,10 @@ export interface CoverageSummary {
 
 export interface AnalysisResults {
   endpoints: EndpointRecord[];
-  policyProposal: StructuredPolicyV2;
+  /** Absent on analyses from before scoped policies. */
+  scopes?: AnalysisScopes;
+  /** `tessera.policy/v2` on analyses from before ADR-0021. */
+  policyProposal: StructuredPolicyV2 | StructuredPolicyV3;
   coverage: CoverageSummary;
   attribution: { discardedEvidence: number; downgradedFindings: number };
 }
@@ -251,6 +286,8 @@ export interface AnalysisDocument {
   usage: AnalysisUsage;
   dossier: DossierDto | null;
   routeRules: RouteRule[] | null;
+  /** Global and environment policies once proposed; absent before ADR-0021. */
+  scopes?: AnalysisScopes | null;
   steps: AnalysisStep[];
   readManifest: AiReadManifest | null;
   results: AnalysisResults | null;

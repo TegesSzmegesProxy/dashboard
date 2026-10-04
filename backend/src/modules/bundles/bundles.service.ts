@@ -10,20 +10,28 @@ import { canonicalJson, JsonValue } from '../../common/canonical-json.js';
 import { objectId } from '../../common/mongodb.js';
 import {
   BundlePolicyV1,
-  SignedActiveBundleV1,
   SUPPORTED_BUNDLE_SCHEMAS,
 } from '../../contracts/bundle/v1/bundle.contract.js';
 import {
-  BUNDLE_SCHEMA_VERSION_V2 as BUNDLE_SCHEMA_VERSION,
+  BUNDLE_SCHEMA_VERSION_V2,
   type ActiveBundleV2Payload,
   type BundleRuntimeConfigV2,
-  type SignedActiveBundleV2,
 } from '../../contracts/bundle/v2/bundle.contract.js';
+import {
+  BUNDLE_SCHEMA_VERSION_V3,
+  type ActiveBundleV3Payload,
+  type BundlePolicyV3,
+  type BundleStepV3,
+} from '../../contracts/bundle/v3/bundle.contract.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
 import type { MachinePrincipal } from '../api-keys/api-key.types.js';
 import { AuditService } from '../audit/audit.service.js';
 import { OutboxService } from '../events/outbox.service.js';
-import type { CompiledPolicyV1 } from '../policy-compiler/policy-compiler.types.js';
+import type {
+  CompiledPolicyV1,
+  CompiledPolicyV3,
+  CompiledStepV3,
+} from '../policy-compiler/policy-compiler.types.js';
 import type { TenantRuntimeConfiguration } from '../projects/project.types.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import { BundleSigningService } from './bundle-signing.service.js';
@@ -33,13 +41,15 @@ import {
   ActiveBundleView,
   BundleActivationResult,
   BundleDocument,
+  SignedActiveBundle,
 } from './bundle.types.js';
 
 export interface BundleActivationInput {
   organizationId: ObjectId;
   tenantId: ObjectId;
   policyVersion: string;
-  compiledPolicy: CompiledPolicyV1;
+  /** v1 policies are distributed as `tessera.bundle/v2`, v3 policies as `tessera.bundle/v3` (ADR-0021). */
+  compiledPolicy: CompiledPolicyV1 | CompiledPolicyV3;
   actorSubject: string;
 }
 
@@ -94,13 +104,24 @@ export class BundlesService implements OnModuleInit {
     );
     if (!runtimeConfiguration) throw new NotFoundException('Tenant not found');
 
-    const content = {
-      schemaVersion: BUNDLE_SCHEMA_VERSION,
-      tenantId: tenantId.toHexString(),
-      policyVersion: input.policyVersion,
-      runtimeConfig: this.toBundleRuntimeConfig(runtimeConfiguration),
-      policy: this.toBundlePolicy(input.compiledPolicy),
-    };
+    const runtimeConfig = this.toBundleRuntimeConfig(runtimeConfiguration);
+    const compiled = input.compiledPolicy;
+    const content =
+      compiled.schemaVersion === 'tessera.policy/v3'
+        ? {
+            schemaVersion: BUNDLE_SCHEMA_VERSION_V3,
+            tenantId: tenantId.toHexString(),
+            policyVersion: input.policyVersion,
+            runtimeConfig,
+            policy: this.toBundlePolicyV3(compiled),
+          }
+        : {
+            schemaVersion: BUNDLE_SCHEMA_VERSION_V2,
+            tenantId: tenantId.toHexString(),
+            policyVersion: input.policyVersion,
+            runtimeConfig,
+            policy: this.toBundlePolicy(compiled),
+          };
     const version = createHash('sha256')
       .update(canonicalJson(content as unknown as JsonValue))
       .digest('hex');
@@ -124,7 +145,7 @@ export class BundlesService implements OnModuleInit {
       { session },
     );
     if (!bundle) {
-      const payload: ActiveBundleV2Payload = {
+      const payload = {
         ...content,
         version,
         issuedAt: now.toISOString(),
@@ -135,7 +156,7 @@ export class BundlesService implements OnModuleInit {
         organizationId,
         tenantId,
         version,
-        schemaVersion: BUNDLE_SCHEMA_VERSION,
+        schemaVersion: content.schemaVersion,
         policyVersion: input.policyVersion,
         toolRegistryVersion: content.policy.toolRegistryVersion,
         canonicalPayload,
@@ -177,7 +198,7 @@ export class BundlesService implements OnModuleInit {
         targetId: version,
         metadata: {
           policyVersion: input.policyVersion,
-          schemaVersion: BUNDLE_SCHEMA_VERSION,
+          schemaVersion: content.schemaVersion,
           signingKeyId: bundle.signature.keyId,
           ...(current ? { previousVersion: current.bundleVersion } : {}),
         },
@@ -192,7 +213,7 @@ export class BundlesService implements OnModuleInit {
     principal: MachinePrincipal,
     tenantId: string,
     compatibility: ProxyCompatibility,
-  ): Promise<SignedActiveBundleV1 | SignedActiveBundleV2> {
+  ): Promise<SignedActiveBundle> {
     const organizationObjectId = objectId(principal.organizationId);
     const tenantObjectId = objectId(tenantId);
     // A deleted tenant must not keep serving its last bundle.
@@ -270,10 +291,9 @@ export class BundlesService implements OnModuleInit {
       { projection: { canonicalPayload: 1 } },
     );
     if (!bundle) return null;
-    const payload = JSON.parse(
-      bundle.canonicalPayload,
-    ) as ActiveBundleV2Payload;
-    const endpoints: ReadonlySet<string> = new Set(
+    const payload = JSON.parse(bundle.canonicalPayload) as
+      ActiveBundleV2Payload | ActiveBundleV3Payload;
+    const endpoints: ReadonlySet<string> = new Set<string>(
       payload.policy.endpoints.map(
         (endpoint) => `${endpoint.method} ${endpoint.path}`,
       ),
@@ -305,12 +325,9 @@ export class BundlesService implements OnModuleInit {
     return { pointer, bundle };
   }
 
-  private toWire(
-    bundle: BundleDocument,
-  ): SignedActiveBundleV1 | SignedActiveBundleV2 {
-    const payload = JSON.parse(
-      bundle.canonicalPayload,
-    ) as ActiveBundleV2Payload;
+  private toWire(bundle: BundleDocument): SignedActiveBundle {
+    const payload = JSON.parse(bundle.canonicalPayload) as
+      ActiveBundleV2Payload | ActiveBundleV3Payload;
     return { ...payload, signature: bundle.signature };
   }
 
@@ -371,6 +388,40 @@ export class BundlesService implements OnModuleInit {
               ? { maxLength: step.config.maxLength }
               : {}),
           },
+        })),
+      })),
+    };
+  }
+
+  /** Explicit field mapping keeps unexpected stored fields out of bundles. */
+  private toBundlePolicyV3(policy: CompiledPolicyV3): BundlePolicyV3 {
+    const steps = (values: CompiledStepV3[]): BundleStepV3[] =>
+      values.map((step) => ({
+        toolId: step.toolId,
+        contextType: step.contextType,
+        ...(step.target === undefined ? {} : { target: step.target }),
+        config: step.config,
+      }));
+    return {
+      schemaVersion: policy.schemaVersion,
+      toolRegistryVersion: policy.toolRegistryVersion,
+      global: {
+        steps: steps(policy.global.steps),
+        jevContext: policy.global.jevContext,
+      },
+      environment: {
+        steps: steps(policy.environment.steps),
+        jevContext: policy.environment.jevContext,
+        environmentSnapshotId: policy.environment.environmentSnapshotId,
+      },
+      endpoints: policy.endpoints.map((endpoint) => ({
+        method: endpoint.method,
+        path: endpoint.path,
+        steps: steps(endpoint.steps),
+        jevContext: endpoint.jevContext,
+        fieldContexts: endpoint.fieldContexts.map(({ target, jevContext }) => ({
+          target,
+          jevContext,
         })),
       })),
     };

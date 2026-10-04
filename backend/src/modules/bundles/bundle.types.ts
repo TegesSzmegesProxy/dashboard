@@ -5,6 +5,10 @@ import type {
   SignedActiveBundleV1,
 } from '../../contracts/bundle/v1/bundle.contract.js';
 import type { SignedActiveBundleV2 } from '../../contracts/bundle/v2/bundle.contract.js';
+import type { SignedActiveBundleV3 } from '../../contracts/bundle/v3/bundle.contract.js';
+
+export type SignedActiveBundle =
+  SignedActiveBundleV1 | SignedActiveBundleV2 | SignedActiveBundleV3;
 
 /** Immutable signed bundle. `canonicalPayload` holds the exact signed bytes. */
 export interface BundleDocument {
@@ -45,7 +49,7 @@ export interface ActiveBundleView extends ActiveBundleSummary {
   activatedBy: string;
   /** Tenant runtime configuration was edited after this bundle was built. */
   runtimeConfigurationPending: boolean;
-  bundle: SignedActiveBundleV1 | SignedActiveBundleV2;
+  bundle: SignedActiveBundle;
 }
 
 export interface BundleActivationResult {

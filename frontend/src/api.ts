@@ -134,8 +134,9 @@ export interface PolicyVersionV1 {
 // ---------- Endpoint policies (tessera.policy/v2, ADR-0014) ----------
 
 export type ToolScope = 'field' | 'file' | 'full';
-export type ToolCategory = 'schema' | 'injection' | 'url' | 'resource' | 'anomaly';
-/** One entry of `tessera.tools/v2`, served by the backend registry. */
+export type ToolCategory =
+  | 'schema' | 'injection' | 'url' | 'resource' | 'anomaly' | 'auth' | 'bot' | 'data_leakage' | 'protocol';
+/** One entry of `tessera.tools/v2` or `tessera.tools/v3`, served by the backend registry. */
 export interface ToolDefinition {
   id: string;
   label: string;
@@ -145,8 +146,17 @@ export interface ToolDefinition {
   /** Needs runtime state; chosen from purpose rather than code, so review it. */
   stateful: boolean;
   useWhen: string;
+  /** v3: false for tools operators configure with the proxy (secrets, data feeds). */
+  aiSelectable?: boolean;
+  /** v3: settings the tool cannot run without. */
+  requiredSettings?: string[];
+  /** v3: JSON Schema of the tool's configuration. */
+  configSchema?: Record<string, unknown>;
 }
-export interface ToolRegistry { toolRegistryVersion: 'tessera.tools/v2'; tools: ToolDefinition[] }
+export interface ToolRegistry { toolRegistryVersion: 'tessera.tools/v2' | 'tessera.tools/v3'; tools: ToolDefinition[] }
+
+/** A selected check; v3 checks carry the tool's configuration (ADR-0021). */
+export interface PolicyTool { toolId: string; config?: Record<string, unknown> }
 
 export type FieldLocation = 'body' | 'query' | 'path' | 'header' | 'cookie' | 'file';
 export interface FieldPolicyV2 {
@@ -155,14 +165,14 @@ export interface FieldPolicyV2 {
   type: string;
   required: boolean;
   humanReadablePolicy: string;
-  tools: { toolId: string }[];
+  tools: PolicyTool[];
   jevContext: string | null;
 }
 export interface EndpointPolicyV2 {
   method: HttpMethod;
   path: string;
   humanReadablePolicy: string;
-  requestTools: { toolId: string }[];
+  requestTools: PolicyTool[];
   jevContext: string | null;
   fields: FieldPolicyV2[];
 }
@@ -171,12 +181,30 @@ export interface StructuredPolicyV2 {
   toolRegistryVersion: 'tessera.tools/v2';
   endpoints: EndpointPolicyV2[];
 }
+/** Policies that apply to every request (ADR-0021). */
+export interface ScopePolicyV3 {
+  humanReadablePolicy: string;
+  requestTools: PolicyTool[];
+  /** Field tools run on every field of the listed locations. */
+  fieldTools: (PolicyTool & { locations: ('body' | 'query')[] })[];
+  jevContext: string | null;
+}
+/** `tessera.policy/v3`: v2-shaped endpoints plus global and environment scopes. */
+export interface StructuredPolicyV3 {
+  schemaVersion: 'tessera.policy/v3';
+  toolRegistryVersion: 'tessera.tools/v3';
+  global: ScopePolicyV3;
+  environment: ScopePolicyV3 & { environmentSnapshotId: string | null };
+  endpoints: EndpointPolicyV2[];
+}
+/** The policies the endpoint editor works on. */
+export type EndpointStructuredPolicy = StructuredPolicyV2 | StructuredPolicyV3;
 /** Length limits of the v2 contract (backend contracts/policy/v2). */
 export const POLICY_V2_LIMITS = { endpointText: 2000, fieldText: 500, endpointJev: 1500, fieldJev: 500 } as const;
 
 export interface ReviewWarning {
-  kind: 'analysis' | 'jev_context';
-  /** `METHOD path` */
+  kind: 'analysis' | 'jev_context' | 'scope_override';
+  /** `METHOD path`, or `global` / `environment` for a scope */
   endpoint: string;
   /** `location:name`, or null for the endpoint */
   field: string | null;
@@ -208,7 +236,17 @@ export interface PolicyVersionV2 {
   lifecycleUpdatedAt: string;
 }
 
-export type PolicyVersion = PolicyVersionV1 | PolicyVersionV2;
+export interface PolicyVersionV3 extends Omit<PolicyVersionV2, 'schemaVersion' | 'toolRegistryVersion' | 'structuredPolicy'> {
+  schemaVersion: 'tessera.policy/v3';
+  toolRegistryVersion: 'tessera.tools/v3';
+  structuredPolicy: StructuredPolicyV3;
+  /** The steps and JEV context a `tessera.bundle/v3` carries. */
+  compiledPolicy: unknown | null;
+}
+/** Versions the endpoint policy editor opens. */
+export type EndpointPolicyVersion = PolicyVersionV2 | PolicyVersionV3;
+
+export type PolicyVersion = PolicyVersionV1 | PolicyVersionV2 | PolicyVersionV3;
 
 /** Preview from `POST policies/v2/compile`; it creates no version. */
 export interface CompiledEndpoint {
@@ -353,7 +391,7 @@ export interface AnalysisSummary {
 }
 
 /** Why the analysis chose a tool; `inferred` goes beyond what the code shows. */
-export interface ToolChoice { toolId: string; basis: 'observed' | 'inferred' | 'environment'; rationale: string }
+export interface ToolChoice { toolId: string; basis: 'observed' | 'inferred' | 'environment'; rationale: string; config?: Record<string, unknown> }
 
 export interface AnalysisEndpoint {
   method: HttpMethod;

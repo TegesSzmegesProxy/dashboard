@@ -9,10 +9,15 @@ import { MongoDatabase } from '../../infrastructure/database/mongo-database.serv
 import { OutboxService } from '../events/outbox.service.js';
 import { PoliciesService } from '../policies/policies.service.js';
 import type { ReviewWarning } from '../policies/policy.types.js';
-import { findTool } from '../../contracts/tools/v2/tool-registry.js';
+import { findToolV3 } from '../../contracts/tools/v3/tool-registry.js';
 import { AnalysesService, LeaseLostError } from './analyses.service.js';
 import { AnalysisPipeline, PhaseOutcome } from './analysis-pipeline.service.js';
-import type { AnalysisDocument, EndpointRecord } from './analysis.types.js';
+import type {
+  AnalysisDocument,
+  AnalysisScopes,
+  EndpointRecord,
+  ToolChoice,
+} from './analysis.types.js';
 
 const POLL_INTERVAL_MS = 5_000;
 const LEASE_MS = 15 * 60_000;
@@ -220,9 +225,18 @@ export class AnalysisWorker
           if (!updated) return;
           // The proposal and its analysis are committed together (Phase 8 M6).
           const proposal = updated.results?.policyProposal;
-          if (outcome.status !== 'failed' && proposal?.endpoints.length) {
+          if (
+            outcome.status !== 'failed' &&
+            proposal?.schemaVersion === 'tessera.policy/v3' &&
+            (proposal.endpoints.length > 0 ||
+              proposal.global.requestTools.length +
+                proposal.global.fieldTools.length +
+                proposal.environment.requestTools.length +
+                proposal.environment.fieldTools.length >
+                0)
+          ) {
             const review = updated.policyReview ?? null;
-            const policy = await this.policies.createV2FromAnalysis(
+            const policy = await this.policies.createFromAnalysis(
               {
                 organizationId: job.organizationId,
                 tenantId: job.tenantId,
@@ -231,6 +245,7 @@ export class AnalysisWorker
                 structuredPolicy: proposal,
                 analysisWarnings: analysisReviewWarnings(
                   updated.results!.endpoints,
+                  updated.results!.scopes ?? null,
                 ),
                 autoApplyBy:
                   review?.mode === 'auto_apply' ? review.chosenBy : null,
@@ -280,32 +295,57 @@ export class AnalysisWorker
  * confidence and stateful tools chosen from purpose rather than code. JEV
  * context lint is recomputed by the policy version itself.
  */
-function analysisReviewWarnings(endpoints: EndpointRecord[]): ReviewWarning[] {
-  return endpoints.flatMap((record) => {
-    const endpoint = `${record.method} ${record.path}`;
-    const at = (message: string): ReviewWarning => ({
+function analysisReviewWarnings(
+  endpoints: EndpointRecord[],
+  scopes: AnalysisScopes | null,
+): ReviewWarning[] {
+  const inferred = (tools: ToolChoice[], subject: string) =>
+    tools
+      .filter(
+        (tool) =>
+          tool.basis === 'inferred' && findToolV3(tool.toolId)?.stateful,
+      )
+      .map(
+        (tool) =>
+          `${findToolV3(tool.toolId)?.label ?? tool.toolId} was chosen from ${subject}'s purpose, not from code; confirm it.`,
+      );
+  const scopeWarnings = (['global', 'environment'] as const).flatMap((name) => {
+    const record = scopes?.[name];
+    if (!record) return [];
+    return [
+      ...record.warnings.filter(
+        (warning) => !warning.startsWith('JEV context of'),
+      ),
+      ...inferred(
+        [...record.requestTools, ...record.fieldTools],
+        `the ${name} policy`,
+      ),
+    ].map((message): ReviewWarning => ({
       kind: 'analysis',
-      endpoint,
+      endpoint: name,
       field: null,
       message,
-    });
-    return [
-      ...record.warnings
-        .filter((warning) => !warning.startsWith('JEV context of'))
-        .map(at),
-      ...(record.confidence === 'low'
-        ? [at('The analysis has low confidence in this endpoint.')]
-        : []),
-      ...record.requestTools
-        .filter(
-          (tool) =>
-            tool.basis === 'inferred' && findTool(tool.toolId)?.stateful,
-        )
-        .map((tool) =>
-          at(
-            `${findTool(tool.toolId)?.label ?? tool.toolId} was chosen from the endpoint's purpose, not from code; confirm it.`,
-          ),
-        ),
-    ];
+    }));
   });
+  return [
+    ...scopeWarnings,
+    ...endpoints.flatMap((record) => {
+      const endpoint = `${record.method} ${record.path}`;
+      const at = (message: string): ReviewWarning => ({
+        kind: 'analysis',
+        endpoint,
+        field: null,
+        message,
+      });
+      return [
+        ...record.warnings
+          .filter((warning) => !warning.startsWith('JEV context of'))
+          .map(at),
+        ...(record.confidence === 'low'
+          ? [at('The analysis has low confidence in this endpoint.')]
+          : []),
+        ...inferred(record.requestTools, 'the endpoint').map(at),
+      ];
+    }),
+  ];
 }

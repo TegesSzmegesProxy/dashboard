@@ -22,6 +22,7 @@ import {
   ImportPolicyDto,
   PolicyVersionParamsDto,
   SavePolicyDraftDto,
+  SavePolicyDraftV3Dto,
 } from './policy.dto.js';
 import type { PolicyVersionView } from './policy.types.js';
 import { PoliciesService } from './policies.service.js';
@@ -57,6 +58,22 @@ export class PoliciesController {
     @CurrentPrincipal() principal: DashboardPrincipal,
   ): Promise<PolicyVersionView> {
     return this.policies.saveDraft(
+      params.organizationId,
+      params.tenantId,
+      dto,
+      principal.subject,
+    );
+  }
+
+  /** Saves a policy editor draft as a new pending `tessera.policy/v3` version. */
+  @Post('v3')
+  @RequireOrganizationRoles('owner', 'admin')
+  saveDraftV3(
+    @Param() params: TenantParamsDto,
+    @Body() dto: SavePolicyDraftV3Dto,
+    @CurrentPrincipal() principal: DashboardPrincipal,
+  ): Promise<PolicyVersionView> {
+    return this.policies.saveDraftV3(
       params.organizationId,
       params.tenantId,
       dto,

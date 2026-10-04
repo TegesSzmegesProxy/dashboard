@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { PolicyVersionV2 } from '../../api';
+import type { EndpointPolicyVersion } from '../../api';
 import { Button, Checkbox, Dialog, Input } from '../../components';
 
 /**
@@ -7,7 +7,7 @@ import { Button, Checkbox, Dialog, Input } from '../../components';
  * flags for review and asks the reviewer to confirm they looked at it.
  */
 export function ApproveDialog({ p, mode, pending, onClose, onConfirm }: {
-  p: PolicyVersionV2; mode: 'approve' | 'reject'; pending: boolean;
+  p: EndpointPolicyVersion; mode: 'approve' | 'reject'; pending: boolean;
   onClose: () => void; onConfirm: (reason?: string) => void;
 }) {
   const [reviewed, setReviewed] = useState(false);

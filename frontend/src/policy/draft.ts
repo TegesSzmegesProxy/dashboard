@@ -1,6 +1,6 @@
-// Policy editor draft: a local copy of a tessera.policy/v2 version that the
+// Policy editor draft: a local copy of a tessera.policy/v2 or v3 version that the
 // user edits before saving it as one new pending version. Pure state only.
-import { POLICY_V2_LIMITS, type EndpointPolicyV2, type FieldPolicyV2, type StructuredPolicyV2, type ToolDefinition, type ToolScope } from '../api';
+import { POLICY_V2_LIMITS, type EndpointPolicyV2, type EndpointStructuredPolicy, type FieldPolicyV2, type PolicyTool, type ToolDefinition, type ToolScope } from '../api';
 
 export const endpointKey = (e: { method: string; path: string }) => `${e.method} ${e.path}`;
 export const fieldKey = (f: { location: string; name: string }) => `${f.location}:${f.name}`;
@@ -17,8 +17,8 @@ export const parseTargetId = (id: string): Target => {
 export const scopeOf = (field: FieldPolicyV2 | null): ToolScope => (!field ? 'full' : field.location === 'file' ? 'file' : 'field');
 
 export interface DraftState {
-  base: StructuredPolicyV2;
-  policy: StructuredPolicyV2;
+  base: EndpointStructuredPolicy;
+  policy: EndpointStructuredPolicy;
   /** Targets whose plain-language text changed and was not compiled yet. */
   uncompiled: string[];
   /** Targets whose checks changed by hand after their text was written. */
@@ -35,22 +35,22 @@ export type DraftAction =
   | { type: 'describe'; target: Target; text: string }
   | { type: 'keepText'; target: Target }
   | { type: 'revertEndpoint'; endpoint: string }
-  | { type: 'reset'; base: StructuredPolicyV2 }
+  | { type: 'reset'; base: EndpointStructuredPolicy }
   /** Resume a draft stored locally (see `loadDraft`). */
   | { type: 'restore'; state: DraftState };
 
-export const initDraft = (base: StructuredPolicyV2): DraftState => ({ base, policy: base, uncompiled: [], staleText: [] });
+export const initDraft = (base: EndpointStructuredPolicy): DraftState => ({ base, policy: base, uncompiled: [], staleText: [] });
 
 const add = (list: string[], id: string) => (list.includes(id) ? list : [...list, id]);
 const drop = (list: string[], id: string) => list.filter((x) => x !== id);
 const dropEndpoint = (list: string[], endpoint: string) => list.filter((x) => parseTargetId(x).endpoint !== endpoint);
 
 function mapTarget(
-  policy: StructuredPolicyV2,
+  policy: EndpointStructuredPolicy,
   t: Target,
   onEndpoint: (e: EndpointPolicyV2) => EndpointPolicyV2,
   onField: (f: FieldPolicyV2) => FieldPolicyV2,
-): StructuredPolicyV2 {
+): EndpointStructuredPolicy {
   return {
     ...policy,
     endpoints: policy.endpoints.map((e) => {
@@ -61,8 +61,11 @@ function mapTarget(
   };
 }
 
-const toggle = (tools: { toolId: string }[], toolId: string, on: boolean) =>
-  on ? (tools.some((t) => t.toolId === toolId) ? tools : [...tools, { toolId }]) : tools.filter((t) => t.toolId !== toolId);
+// v3 checks carry a configuration; one added here starts from the proxy's defaults.
+const toggle = (tools: PolicyTool[], toolId: string, on: boolean, withConfig: boolean) =>
+  on
+    ? (tools.some((t) => t.toolId === toolId) ? tools : [...tools, withConfig ? { toolId, config: {} } : { toolId }])
+    : tools.filter((t) => t.toolId !== toolId);
 
 export function draftReducer(s: DraftState, a: DraftAction): DraftState {
   switch (a.type) {
@@ -76,8 +79,8 @@ export function draftReducer(s: DraftState, a: DraftAction): DraftState {
     case 'tool': {
       const policy = mapTarget(
         s.policy, a.target,
-        (e) => ({ ...e, requestTools: toggle(e.requestTools, a.toolId, a.on) }),
-        (f) => ({ ...f, tools: toggle(f.tools, a.toolId, a.on) }),
+        (e) => ({ ...e, requestTools: toggle(e.requestTools, a.toolId, a.on, s.policy.schemaVersion === 'tessera.policy/v3') }),
+        (f) => ({ ...f, tools: toggle(f.tools, a.toolId, a.on, s.policy.schemaVersion === 'tessera.policy/v3') }),
       );
       return { ...s, policy, staleText: add(s.staleText, targetId(a.target)) };
     }
@@ -115,7 +118,7 @@ export function draftReducer(s: DraftState, a: DraftAction): DraftState {
   }
 }
 
-export function findTarget(policy: StructuredPolicyV2, t: Target): { endpoint: EndpointPolicyV2; field: FieldPolicyV2 | null } | null {
+export function findTarget(policy: EndpointStructuredPolicy, t: Target): { endpoint: EndpointPolicyV2; field: FieldPolicyV2 | null } | null {
   const endpoint = policy.endpoints.find((e) => endpointKey(e) === t.endpoint);
   if (!endpoint) return null;
   if (!t.field) return { endpoint, field: null };
@@ -123,12 +126,12 @@ export function findTarget(policy: StructuredPolicyV2, t: Target): { endpoint: E
   return field ? { endpoint, field } : null;
 }
 
-export function textOf(policy: StructuredPolicyV2, t: Target): string {
+export function textOf(policy: EndpointStructuredPolicy, t: Target): string {
   const found = findTarget(policy, t);
   return found ? (found.field ? found.field.humanReadablePolicy : found.endpoint.humanReadablePolicy) : '';
 }
 
-export function toolsOf(policy: StructuredPolicyV2, t: Target): string[] {
+export function toolsOf(policy: EndpointStructuredPolicy, t: Target): string[] {
   const found = findTarget(policy, t);
   return found ? (found.field ? found.field.tools : found.endpoint.requestTools).map((x) => x.toolId) : [];
 }
@@ -154,7 +157,7 @@ function diffElement(endpoint: string, field: string | null, before: { text: str
 }
 
 /** Changes from `base` to `draft`. Endpoints and fields are fixed, so they only change in place. */
-export function diffPolicy(base: StructuredPolicyV2, draft: StructuredPolicyV2): Change[] {
+export function diffPolicy(base: EndpointStructuredPolicy, draft: EndpointStructuredPolicy): Change[] {
   return draft.endpoints.flatMap((e) => {
     const b = base.endpoints.find((x) => endpointKey(x) === endpointKey(e));
     if (!b) return [];
@@ -179,7 +182,7 @@ export function diffPolicy(base: StructuredPolicyV2, draft: StructuredPolicyV2):
 
 export interface DraftProblem { target: Target; message: string }
 
-export function validateDraft(policy: StructuredPolicyV2, registry: ToolDefinition[]): DraftProblem[] {
+export function validateDraft(policy: EndpointStructuredPolicy, registry: ToolDefinition[]): DraftProblem[] {
   const scope = new Map(registry.map((t) => [t.id, t.scope]));
   const out: DraftProblem[] = [];
   for (const e of policy.endpoints) {
@@ -217,13 +220,13 @@ export function describeChecks(toolIds: string[], registry: ToolDefinition[], is
 
 const storageKey = (tenantId: string, version: string) => `tessera.policyDraft.${tenantId}.${version}`;
 
-export function loadDraft(tenantId: string, version: string, base: StructuredPolicyV2): DraftState | null {
+export function loadDraft(tenantId: string, version: string, base: EndpointStructuredPolicy): DraftState | null {
   try {
     const raw = localStorage.getItem(storageKey(tenantId, version));
     if (!raw) return null;
     const saved = JSON.parse(raw) as Omit<DraftState, 'base'>;
     // A stored draft only applies to the same endpoints and fields.
-    const shape = (p: StructuredPolicyV2) => p.endpoints.map((e) => `${endpointKey(e)}|${e.fields.map(fieldKey).join(',')}`).join(';');
+    const shape = (p: EndpointStructuredPolicy) => p.endpoints.map((e) => `${endpointKey(e)}|${e.fields.map(fieldKey).join(',')}`).join(';');
     if (shape(saved.policy) !== shape(base)) return null;
     return { base, policy: saved.policy, uncompiled: saved.uncompiled ?? [], staleText: saved.staleText ?? [] };
   } catch {

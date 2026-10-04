@@ -3,10 +3,12 @@ import {
   METHOD_GROUP_SCHEMA,
   PATH_GROUP_SCHEMA,
   SUBMIT_ENDPOINT_SCHEMA,
+  SUBMIT_ENVIRONMENT_POLICY_SCHEMA,
   SUBMIT_RECON_SCHEMA,
   SUBMIT_SWEEP_SCHEMA,
 } from '../../contracts/analysis/v2/analysis-agent.contract.js';
 import { HTTP_METHODS } from '../../contracts/policy/v1/policy.contract.js';
+import { findToolV3 } from '../../contracts/tools/v3/tool-registry.js';
 import type { ToolExecution } from '../../infrastructure/ai/agent/agent-loop.js';
 import type { LlmTool } from '../../infrastructure/ai/llm/llm.types.js';
 import {
@@ -98,6 +100,13 @@ const NOTE_TOOL = strict(
   { note: { type: 'string' } },
 );
 
+/** Reads the registry, not the repository: its output is trusted, fixed data. */
+const TOOL_SCHEMA_TOOL = strict(
+  'get_tool_config_schema',
+  "Return the JSON Schema of a proxy tool's configuration (the settings configJson may hold), with its scope and description.",
+  { tool_id: { type: 'string' } },
+);
+
 const TEST_RULE_TOOL = strict(
   'test_route_rule',
   'Dry-run a route rule over the repository and see the match count, sample matches and errors.',
@@ -123,16 +132,28 @@ export const RECON_TOOLS: LlmTool[] = [
   ...NAVIGATION_TOOLS,
   NOTE_TOOL,
   TEST_RULE_TOOL,
+  TOOL_SCHEMA_TOOL,
   submit(
     'submit_recon',
-    'Submit the application dossier, route rules and extra candidates. Call exactly once.',
+    'Submit the application dossier, route rules, extra candidates and the global policy. Call exactly once.',
     SUBMIT_RECON_SCHEMA,
+  ),
+];
+
+export const ENVIRONMENT_TOOLS: LlmTool[] = [
+  ...NAVIGATION_TOOLS,
+  TOOL_SCHEMA_TOOL,
+  submit(
+    'submit_environment_policy',
+    'Submit the environment policy (possibly empty). Call exactly once.',
+    SUBMIT_ENVIRONMENT_POLICY_SCHEMA,
   ),
 ];
 
 export const ENDPOINT_TOOLS: LlmTool[] = [
   ...NAVIGATION_TOOLS,
   NOTE_TOOL,
+  TOOL_SCHEMA_TOOL,
   submit(
     'submit_endpoint',
     'Submit the resolution of your candidate with facts and the proposed endpoint policy. Call exactly once.',
@@ -261,6 +282,8 @@ export class RepoToolExecutor {
           return this.recordNote(input);
         case 'test_route_rule':
           return await this.testRule(input);
+        case 'get_tool_config_schema':
+          return this.toolConfigSchema(input);
         default:
           return { content: `Unknown tool ${name}.`, isError: true };
       }
@@ -397,6 +420,25 @@ export class RepoToolExecutor {
               `${symbol.startLine}-${symbol.endLine}  ${symbol.kind} ${sanitizeLine(symbol.name)}`,
           )
           .join('\n') || 'No symbols.',
+    };
+  }
+
+  private toolConfigSchema(input: Record<string, unknown>): ToolExecution {
+    const tool = findToolV3(text(input.tool_id));
+    if (!tool || !tool.aiSelectable) {
+      return {
+        content: 'Unknown tool id; use one of the listed tools.',
+        isError: true,
+      };
+    }
+    return {
+      content: JSON.stringify({
+        toolId: tool.id,
+        scope: tool.scope,
+        description: tool.summary,
+        requiredSettings: tool.requiredSettings,
+        configSchema: tool.configSchema,
+      }),
     };
   }
 

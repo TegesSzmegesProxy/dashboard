@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ApiError, errorText, useApi, type PolicyVersionV2, type StructuredPolicyV2 } from '../../api';
+import { ApiError, errorText, useApi, type EndpointPolicyVersion, type EndpointStructuredPolicy } from '../../api';
 import { Button, Dialog } from '../../components';
 import type { Change } from '../../policy/draft';
 import { Note } from '../../ui';
@@ -9,7 +9,7 @@ const WHAT = { text: 'Description changed', jev: 'JEV context changed' } as cons
 
 /** Groups the draft's changes per endpoint and saves them as one new pending version. */
 export function SaveDialog({ path, parent, policy, changes, onClose, onSaved }: {
-  path: string; parent: PolicyVersionV2; policy: StructuredPolicyV2; changes: Change[];
+  path: string; parent: EndpointPolicyVersion; policy: EndpointStructuredPolicy; changes: Change[];
   onClose: () => void; onSaved: (version: string) => void;
 }) {
   const api = useApi();
@@ -24,7 +24,8 @@ export function SaveDialog({ path, parent, policy, changes, onClose, onSaved }: 
     setPending(true);
     setError(null);
     try {
-      const v = await api<PolicyVersionV2>(`${path}/policies/v2`, { method: 'POST', body: { parentVersion: parent.version, structuredPolicy: policy } });
+      const route = parent.schemaVersion === 'tessera.policy/v3' ? 'v3' : 'v2';
+      const v = await api<EndpointPolicyVersion>(`${path}/policies/${route}`, { method: 'POST', body: { parentVersion: parent.version, structuredPolicy: policy } });
       onSaved(v.version);
     } catch (e) {
       setError({ message: errorText(e), issues: e instanceof ApiError ? e.issues : [] });

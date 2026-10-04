@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsOptional,
   IsString,
   Matches,
   Max,
@@ -26,13 +27,23 @@ import {
   MAX_TOOLS_PER_ELEMENT,
 } from '../../policy/v2/policy.contract.js';
 import type { FieldLocationV2 } from '../../policy/v2/policy.contract.js';
-import { TOOL_IDS } from '../../tools/v2/tool-registry.js';
-import type { ToolId } from '../../tools/v2/tool-registry.js';
+import {
+  MAX_SCOPE_JEV_CONTEXT,
+  MAX_TOOL_CONFIG_LENGTH,
+  SCOPE_FIELD_LOCATIONS,
+} from '../../policy/v3/policy.contract.js';
+import type { ScopeFieldLocation } from '../../policy/v3/policy.contract.js';
+import { AI_TOOL_IDS_V3 } from '../../tools/v3/tool-registry.js';
 
 /**
  * `tessera.analysis/v2` agent submissions (ADR-0013). The JSON schemas below
  * are the strict `submit_*` tool inputs; strict schemas cannot express
  * lengths, so the DTOs re-validate every submission as untrusted input.
+ *
+ * Tool choices name `tessera.tools/v3` tools (ADR-0021) and carry their
+ * configuration as a JSON string: strict schemas cannot describe 150
+ * different configuration objects, so reconciliation parses it and checks it
+ * against the tool's schema.
  */
 export const ANALYSIS_SCHEMA_V2 = 'tessera.analysis/v2' as const;
 export const DISPOSITIONS = [
@@ -79,6 +90,15 @@ export const FINDING_SEVERITIES = [
 export const MAX_EVIDENCE = 10;
 const LIST = 300;
 
+/**
+ * Local models sometimes ignore the strict schema and send a single string
+ * where a list is required. Wrapping it loses nothing; validation still runs.
+ */
+const stringOrList = () =>
+  Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? [value] : value,
+  );
+
 export class EvidenceDto {
   @IsString()
   @MaxLength(1_024)
@@ -96,8 +116,8 @@ export class EvidenceDto {
 }
 
 export class ToolChoiceDto {
-  @IsIn(TOOL_IDS)
-  toolId!: ToolId;
+  @IsIn(AI_TOOL_IDS_V3)
+  toolId!: string;
 
   @IsIn(EVIDENCE_BASES)
   basis!: EvidenceBasis;
@@ -105,6 +125,59 @@ export class ToolChoiceDto {
   @IsString()
   @MaxLength(500)
   rationale!: string;
+
+  /** The tool's configuration as a JSON object string; `{}` uses the proxy's defaults. */
+  @IsString()
+  @MaxLength(MAX_TOOL_CONFIG_LENGTH)
+  configJson!: string;
+}
+
+/** A field tool a scope runs on every field of the listed locations. */
+export class ScopeFieldToolChoiceDto extends ToolChoiceDto {
+  @IsArray()
+  @ArrayMaxSize(SCOPE_FIELD_LOCATIONS.length)
+  @IsIn(SCOPE_FIELD_LOCATIONS, { each: true })
+  locations!: ScopeFieldLocation[];
+}
+
+/**
+ * Policies that apply to every request: `global` ones from cross-cutting code,
+ * `environment` ones from the environment snapshot.
+ */
+export class ScopePolicySubmissionDto {
+  @IsString()
+  @MaxLength(MAX_HUMAN_READABLE_POLICY)
+  humanReadablePolicy!: string;
+
+  @IsArray()
+  @ArrayMaxSize(MAX_TOOLS_PER_ELEMENT)
+  @ValidateNested({ each: true })
+  @Type(() => ToolChoiceDto)
+  requestTools!: ToolChoiceDto[];
+
+  @IsArray()
+  @ArrayMaxSize(MAX_TOOLS_PER_ELEMENT)
+  @ValidateNested({ each: true })
+  @Type(() => ScopeFieldToolChoiceDto)
+  fieldTools!: ScopeFieldToolChoiceDto[];
+
+  @ValidateIf((scope: ScopePolicySubmissionDto) => scope.jevContext !== null)
+  @IsString()
+  @MaxLength(MAX_SCOPE_JEV_CONTEXT)
+  jevContext!: string | null;
+
+  @IsArray()
+  @ArrayMaxSize(MAX_EVIDENCE)
+  @ValidateNested({ each: true })
+  @Type(() => EvidenceDto)
+  evidence!: EvidenceDto[];
+
+  @stringOrList()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(LIST, { each: true })
+  limitations!: string[];
 }
 
 export class AuthFactDto {
@@ -308,15 +381,6 @@ export class SubmitEndpointDto {
   endpoint!: EndpointFindingDto | null;
 }
 
-/**
- * Local models sometimes ignore the strict schema and send a single string
- * where a list is required. Wrapping it loses nothing; validation still runs.
- */
-const stringOrList = () =>
-  Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? [value] : value,
-  );
-
 export class DossierDto {
   @IsString()
   @MaxLength(3_000)
@@ -447,6 +511,18 @@ export class SubmitReconDto {
   @ValidateNested({ each: true })
   @Type(() => CandidateDto)
   candidates!: CandidateDto[];
+
+  /** Optional so a model that leaves it out still keeps its dossier and rules. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ScopePolicySubmissionDto)
+  globalPolicy?: ScopePolicySubmissionDto;
+}
+
+export class SubmitEnvironmentPolicyDto {
+  @ValidateNested()
+  @Type(() => ScopePolicySubmissionDto)
+  environmentPolicy!: ScopePolicySubmissionDto;
 }
 
 export class SubmitSweepDto {
@@ -482,10 +558,25 @@ const nullableObj = (properties: Record<string, Schema>): Schema => ({
 
 const evidenceSchema = obj({ path: str(), startLine: int(), endLine: int() });
 const evidenceList = arr(evidenceSchema);
-const toolChoiceSchema = obj({
-  toolId: enumOf(TOOL_IDS),
+const toolChoiceProperties = {
+  toolId: enumOf(AI_TOOL_IDS_V3),
   basis: enumOf(EVIDENCE_BASES),
   rationale: str(),
+  configJson: str(),
+};
+const toolChoiceSchema = obj(toolChoiceProperties);
+const scopePolicySchema = obj({
+  humanReadablePolicy: str(),
+  requestTools: arr(toolChoiceSchema),
+  fieldTools: arr(
+    obj({
+      ...toolChoiceProperties,
+      locations: arr(enumOf(SCOPE_FIELD_LOCATIONS)),
+    }),
+  ),
+  jevContext: nullableStr(),
+  evidence: evidenceList,
+  limitations: arr(str()),
 });
 const candidateSchema = obj({
   method: enumOf(HTTP_METHODS, true),
@@ -588,6 +679,11 @@ export const SUBMIT_RECON_SCHEMA: Schema = obj({
     }),
   ),
   candidates: arr(candidateSchema),
+  globalPolicy: scopePolicySchema,
+});
+
+export const SUBMIT_ENVIRONMENT_POLICY_SCHEMA: Schema = obj({
+  environmentPolicy: scopePolicySchema,
 });
 
 export const SUBMIT_SWEEP_SCHEMA: Schema = obj({

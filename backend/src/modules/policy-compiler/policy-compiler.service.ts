@@ -13,8 +13,22 @@ import {
   toolPlacementIssues,
 } from '../../contracts/policy/v2/policy.contract.js';
 import {
+  ENFORCEABLE_FIELD_LOCATIONS,
+  POLICY_SCHEMA_V3,
+  policyIssuesV3,
+  PolicyToolV3,
+  ScopePolicyV3,
+  StructuredPolicyV3,
+  StructuredPolicyV3Dto,
+} from '../../contracts/policy/v3/policy.contract.js';
+import { TOOL_REGISTRY_V3 } from '../../contracts/tools/v3/tool-registry.js';
+import {
   CompilationResult,
+  CompilationResultV3,
   CompiledEndpointPolicy,
+  CompiledEndpointPolicyV3,
+  CompiledScopeV3,
+  CompiledStepV3,
   CompiledToolStep,
   PolicyInput,
 } from './policy-compiler.types.js';
@@ -177,9 +191,152 @@ export class PolicyCompilerService {
     return { ok: issues.length === 0, issues };
   }
 
+  /**
+   * Compiles a `tessera.policy/v3` policy into the steps and JEV context the
+   * proxy runs (ADR-0021). Every tool is placed at its scope and its
+   * configuration is checked against the vendored `tessera.tools/v3`
+   * schemas. Human-readable policy is never compiled. Steps are sorted so
+   * equal policies compile to equal bytes.
+   */
+  compileV3(policy: StructuredPolicyV3): CompilationResultV3 {
+    const issues = flattenValidation(
+      validateSync(plainToInstance(StructuredPolicyV3Dto, policy), {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
+    if (issues.length > 0) return { ok: false, issues };
+    issues.push(...policyIssuesV3(policy));
+    if (issues.length > 0) return { ok: false, issues };
+
+    const scope = (value: ScopePolicyV3): CompiledScopeV3 => ({
+      steps: sortSteps([
+        ...value.requestTools.map((tool) => step(tool, 'full')),
+        ...value.fieldTools.flatMap((tool) =>
+          tool.locations.map((location) =>
+            step(tool, 'field', `${location}.*`),
+          ),
+        ),
+      ]),
+      jevContext: value.jevContext,
+    });
+    const global = scope(policy.global);
+    const environment = {
+      ...scope(policy.environment),
+      environmentSnapshotId: policy.environment.environmentSnapshotId,
+    };
+    const endpoints: CompiledEndpointPolicyV3[] = policy.endpoints.map(
+      (endpoint) => ({
+        method: endpoint.method,
+        path: endpoint.path,
+        steps: sortSteps([
+          ...endpoint.requestTools.map((tool) => step(tool, 'full')),
+          ...endpoint.fields.flatMap((field) =>
+            field.tools.map((tool) =>
+              field.location === 'file'
+                ? step(tool, 'file', field.name)
+                : step(tool, 'field', `${field.location}.${field.name}`),
+            ),
+          ),
+        ]),
+        jevContext: endpoint.jevContext,
+        // The proxy inspects body and query fields; other locations' context
+        // stays in the policy for reviewers.
+        fieldContexts: endpoint.fields
+          .filter(
+            (field): field is typeof field & { jevContext: string } =>
+              field.jevContext !== null &&
+              ENFORCEABLE_FIELD_LOCATIONS.has(field.location),
+          )
+          .map((field) => ({
+            target: `${field.location}.${field.name}`,
+            jevContext: field.jevContext,
+          })),
+      }),
+    );
+
+    const overrides: { endpoint: string | null; message: string }[] = [];
+    const scopeKeys = (value: CompiledScopeV3) =>
+      new Set(value.steps.map(stepKey));
+    const globalKeys = scopeKeys(global);
+    const environmentKeys = scopeKeys(environment);
+    for (const key of environmentKeys) {
+      if (globalKeys.has(key)) {
+        overrides.push({
+          endpoint: null,
+          message: `Environment step ${key} replaces the global one.`,
+        });
+      }
+    }
+    for (const endpoint of endpoints) {
+      for (const key of endpoint.steps.map(stepKey)) {
+        const replaced = environmentKeys.has(key)
+          ? 'environment'
+          : globalKeys.has(key)
+            ? 'global'
+            : null;
+        if (replaced) {
+          overrides.push({
+            endpoint: `${endpoint.method} ${endpoint.path}`,
+            message: `Endpoint step ${key} replaces the ${replaced} one.`,
+          });
+        }
+      }
+    }
+    const tooMany = [
+      ...(global.steps.length > MAX_STEPS ? ['global.steps: count'] : []),
+      ...(environment.steps.length > MAX_STEPS
+        ? ['environment.steps: count']
+        : []),
+      ...endpoints.flatMap((endpoint, index) =>
+        endpoint.steps.length > MAX_STEPS
+          ? [`endpoints.${index}.steps: count`]
+          : [],
+      ),
+    ];
+    if (tooMany.length > 0) return { ok: false, issues: tooMany };
+
+    return {
+      ok: true,
+      compiledPolicy: {
+        schemaVersion: POLICY_SCHEMA_V3,
+        toolRegistryVersion: TOOL_REGISTRY_V3,
+        global,
+        environment,
+        endpoints,
+      },
+      overrides,
+    };
+  }
+
   private invalidConfig(message: string): CompilationResult {
     return { ok: false, error: { code: 'INVALID_TOOL_CONFIG', message } };
   }
+}
+
+/** Steps per scope or endpoint that a `tessera.bundle/v3` accepts. */
+const MAX_STEPS = 100;
+
+function step(
+  tool: PolicyToolV3,
+  contextType: CompiledStepV3['contextType'],
+  target?: string,
+): CompiledStepV3 {
+  return {
+    toolId: tool.toolId,
+    contextType,
+    ...(target === undefined ? {} : { target }),
+    config: tool.config,
+  };
+}
+
+const stepKey = (value: CompiledStepV3) =>
+  `${value.toolId}:${value.target ?? ''}`;
+
+function sortSteps(steps: CompiledStepV3[]): CompiledStepV3[] {
+  return [...steps].sort((a, b) =>
+    stepKey(a) < stepKey(b) ? -1 : stepKey(a) > stepKey(b) ? 1 : 0,
+  );
 }
 
 function flattenValidation(errors: ValidationError[], prefix = ''): string[] {

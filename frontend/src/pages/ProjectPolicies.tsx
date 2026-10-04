@@ -57,7 +57,7 @@ export function ProjectPolicies({ path }: { path: string }) {
         <LoadMore hasMore={policies.hasMore} loadMore={policies.loadMore} />
       </Section>
 
-      {current?.schemaVersion === 'tessera.policy/v2' && (
+      {(current?.schemaVersion === 'tessera.policy/v2' || current?.schemaVersion === 'tessera.policy/v3') && (
         <PolicyEditor key={current.id} p={current} path={path} tenantId={tenantId} reload={policies.reload}
           onOpenVersion={(v) => { policies.reload(); setParam('version', v); }}
           endpoint={params.get('endpoint')} onEndpoint={(k) => setParam('endpoint', k)} />

@@ -23,20 +23,34 @@ import {
   TOOL_REGISTRY_VERSION,
 } from '../../contracts/policy/v1/policy.contract.js';
 import {
-  EndpointPolicyV2,
   jevContextReadsAsInstruction,
   POLICY_SCHEMA_V2,
   StructuredPolicyV2,
 } from '../../contracts/policy/v2/policy.contract.js';
+import {
+  POLICY_SCHEMA_V3,
+  PolicyScopeName,
+  PolicyToolV3,
+  ScopePolicyV3,
+  StructuredPolicyV3,
+} from '../../contracts/policy/v3/policy.contract.js';
 import { TOOL_REGISTRY_V2 } from '../../contracts/tools/v2/tool-registry.js';
+import { TOOL_REGISTRY_V3 } from '../../contracts/tools/v3/tool-registry.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { BundlesService } from '../bundles/bundles.service.js';
 import { OutboxService } from '../events/outbox.service.js';
 import { PolicyCompilerService } from '../policy-compiler/policy-compiler.service.js';
-import type { CompiledPolicyV1 } from '../policy-compiler/policy-compiler.types.js';
+import type {
+  CompilationResultV3,
+  CompiledPolicyV1,
+} from '../policy-compiler/policy-compiler.types.js';
 import { ProjectsService } from '../projects/projects.service.js';
-import { ImportPolicyDto, SavePolicyDraftDto } from './policy.dto.js';
+import {
+  ImportPolicyDto,
+  SavePolicyDraftDto,
+  SavePolicyDraftV3Dto,
+} from './policy.dto.js';
 import {
   ActivePolicyPointerDocument,
   PolicyVersionDocument,
@@ -44,17 +58,19 @@ import {
   PolicyVersionV1Document,
   PolicyVersionV2Document,
   PolicyVersionV2View,
+  PolicyVersionV3Document,
+  PolicyVersionV3View,
   PolicyVersionView,
   ReviewWarning,
 } from './policy.types.js';
 
-/** A pending `tessera.policy/v2` proposal committed with its analysis. */
+/** A pending `tessera.policy/v3` proposal committed with its analysis. */
 export interface AnalysisPolicyVersionInput {
   organizationId: ObjectId;
   tenantId: ObjectId;
   analysisId: ObjectId;
   aiModel: string | null;
-  structuredPolicy: StructuredPolicyV2;
+  structuredPolicy: StructuredPolicyV3;
   /** Reconciliation warnings, confidence and inferred tools (kind `analysis`). */
   analysisWarnings: ReviewWarning[];
   /**
@@ -76,6 +92,26 @@ export interface AnalysisPolicyVersionResult {
 /** Endpoint key used in diffs, warnings and telemetry. */
 const endpointKey = (endpoint: { method: string; path: string }) =>
   `${endpoint.method} ${endpoint.path}`;
+
+/** The text of an endpoint that free-text checks inspect, in any schema. */
+interface EndpointText {
+  method: string;
+  path: string;
+  humanReadablePolicy: string;
+  jevContext: string | null;
+  fields: {
+    name: string;
+    location: string;
+    type: string;
+    required: boolean;
+    humanReadablePolicy: string;
+    jevContext: string | null;
+  }[];
+}
+
+type StructuredPolicyV2OrV3 = StructuredPolicyV2 | StructuredPolicyV3;
+
+const SCOPES: readonly PolicyScopeName[] = ['global', 'environment'];
 
 export interface GeneratedPolicyVersionInput {
   organizationId: ObjectId;
@@ -344,16 +380,16 @@ export class PoliciesService implements OnModuleInit {
   }
 
   /**
-   * Stores the analysis proposal as a pending v2 version inside the
+   * Stores the analysis proposal as a pending v3 version inside the
    * analysis' own transaction, and applies a standing approval when one was
    * chosen and nothing needs review (ADR-0018).
    */
-  async createV2FromAnalysis(
+  async createFromAnalysis(
     input: AnalysisPolicyVersionInput,
     session: ClientSession,
   ): Promise<AnalysisPolicyVersionResult> {
-    const policy = input.structuredPolicy;
-    const version = this.versionHashV2(policy);
+    const policy = this.normalizeV3(input.structuredPolicy);
+    const version = this.structuredVersionHash(policy);
     const existing = await this.versions.findOne(
       {
         organizationId: input.organizationId,
@@ -372,10 +408,11 @@ export class PoliciesService implements OnModuleInit {
           : null,
       };
     }
-    const compilation = this.compiler.compileV2(policy);
+    const compilation = this.compiler.compileV3(policy);
     const reviewWarnings = [
       ...input.analysisWarnings,
       ...this.jevContextWarnings(policy),
+      ...this.overrideWarnings(compilation),
     ];
     const autoApplySkipped = !input.autoApplyBy
       ? null
@@ -388,16 +425,17 @@ export class PoliciesService implements OnModuleInit {
             : null;
     const approve = input.autoApplyBy !== null && autoApplySkipped === null;
     const now = new Date();
-    const document: PolicyVersionV2Document = {
+    const document: PolicyVersionV3Document = {
       _id: new ObjectId(),
       organizationId: input.organizationId,
       tenantId: input.tenantId,
       version,
-      schemaVersion: POLICY_SCHEMA_V2,
-      toolRegistryVersion: TOOL_REGISTRY_V2,
+      schemaVersion: POLICY_SCHEMA_V3,
+      toolRegistryVersion: TOOL_REGISTRY_V3,
       structuredPolicy: policy,
+      ...(compilation.ok ? { compiledPolicy: compilation.compiledPolicy } : {}),
       compilationStatus: compilation.ok ? 'compiled' : 'failed',
-      compilationIssues: compilation.issues,
+      compilationIssues: compilation.ok ? [] : compilation.issues,
       reviewWarnings,
       aiWritten: true,
       approvalStatus: !compilation.ok
@@ -468,7 +506,8 @@ export class PoliciesService implements OnModuleInit {
         { version },
         session,
       );
-      // TODO(ADR-0018): also activate once a bundle schema carries policy v2.
+      // ADR-0018: a standing approval approves; activation stays a separate,
+      // explicit step until automatic activation is decided.
     }
     return { version, created: true, approved: approve, autoApplySkipped };
   }
@@ -484,55 +523,207 @@ export class PoliciesService implements OnModuleInit {
     dto: SavePolicyDraftDto,
     actorSubject: string,
   ): Promise<PolicyVersionView> {
-    const organizationObjectId = objectId(organizationId);
-    const tenantObjectId = objectId(tenantId);
-    const parent = await this.versions.findOne({
-      organizationId: organizationObjectId,
-      tenantId: tenantObjectId,
-      version: dto.parentVersion,
-    });
-    if (!parent) throw new NotFoundException('Parent policy version not found');
+    const parent = await this.findVersion(
+      organizationId,
+      tenantId,
+      dto.parentVersion,
+    );
     if (parent.schemaVersion !== POLICY_SCHEMA_V2) {
       throw new ConflictException(
-        'Only tessera.policy/v2 versions can be edited here',
+        `Only tessera.policy/v2 versions can be edited here; ${parent.schemaVersion} drafts are saved to policies/v3`,
       );
     }
     const policy = this.normalizeV2(dto.structuredPolicy);
-    const shapeIssues = this.shapeChanges(parent.structuredPolicy, policy);
-    const secretPaths = this.secretPaths(policy);
     const compilation = this.compiler.compileV2(policy);
-    const issues = [...shapeIssues, ...secretPaths, ...compilation.issues];
+    this.assertDraftable([
+      ...this.shapeChanges(parent.structuredPolicy, policy),
+      ...this.secretPaths(policy),
+      ...compilation.issues,
+    ]);
+    return this.insertDraft(
+      organizationId,
+      tenantId,
+      parent,
+      policy,
+      actorSubject,
+      (base): PolicyVersionV2Document => ({
+        ...base,
+        schemaVersion: POLICY_SCHEMA_V2,
+        toolRegistryVersion: TOOL_REGISTRY_V2,
+        structuredPolicy: policy,
+        compilationStatus: 'compiled',
+        compilationIssues: [],
+        reviewWarnings: [
+          ...this.inheritedWarnings(parent),
+          ...this.jevContextWarnings(policy),
+        ],
+      }),
+    );
+  }
+
+  /**
+   * Saves a `tessera.policy/v3` editor draft (ADR-0021). Besides endpoint
+   * text, tools and JEV context, a draft may change the global and
+   * environment scopes; it cannot add or remove endpoints or fields, or
+   * change which environment snapshot the environment scope came from.
+   */
+  async saveDraftV3(
+    organizationId: string,
+    tenantId: string,
+    dto: SavePolicyDraftV3Dto,
+    actorSubject: string,
+  ): Promise<PolicyVersionView> {
+    const parent = await this.findVersion(
+      organizationId,
+      tenantId,
+      dto.parentVersion,
+    );
+    if (parent.schemaVersion !== POLICY_SCHEMA_V3) {
+      throw new ConflictException(
+        `Only tessera.policy/v3 versions can be edited here; ${parent.schemaVersion} drafts are saved to policies/v2`,
+      );
+    }
+    const policy = this.normalizeV3(dto.structuredPolicy);
+    const compilation = this.compiler.compileV3(policy);
+    this.assertDraftable([
+      ...this.shapeChanges(parent.structuredPolicy, policy),
+      ...(policy.environment.environmentSnapshotId !==
+      parent.structuredPolicy.environment.environmentSnapshotId
+        ? ['environment.environmentSnapshotId: changed']
+        : []),
+      ...this.secretPaths(policy),
+      ...(compilation.ok ? [] : compilation.issues),
+    ]);
+    if (!compilation.ok) throw new Error('Unreachable: issues were reported');
+    return this.insertDraft(
+      organizationId,
+      tenantId,
+      parent,
+      policy,
+      actorSubject,
+      (base): PolicyVersionV3Document => ({
+        ...base,
+        schemaVersion: POLICY_SCHEMA_V3,
+        toolRegistryVersion: TOOL_REGISTRY_V3,
+        structuredPolicy: policy,
+        compiledPolicy: compilation.compiledPolicy,
+        compilationStatus: 'compiled',
+        compilationIssues: [],
+        reviewWarnings: [
+          ...this.inheritedWarnings(parent),
+          ...this.jevContextWarnings(policy),
+          ...this.overrideWarnings(compilation),
+        ],
+      }),
+    );
+  }
+
+  private async findVersion(
+    organizationId: string,
+    tenantId: string,
+    version: string,
+  ): Promise<PolicyVersionDocument> {
+    const document = await this.versions.findOne({
+      organizationId: objectId(organizationId),
+      tenantId: objectId(tenantId),
+      version,
+    });
+    if (!document) {
+      throw new NotFoundException('Parent policy version not found');
+    }
+    return document;
+  }
+
+  private assertDraftable(issues: string[]): void {
     if (issues.length > 0) {
       throw new UnprocessableEntityException({
         message: 'The draft cannot be saved',
         issues,
       });
     }
-    const version = this.versionHashV2(policy);
-    const parentByKey = new Map(
-      parent.structuredPolicy.endpoints.map((endpoint) => [
+  }
+
+  /** Reconciliation warnings stay with every version derived from an analysis. */
+  private inheritedWarnings(
+    parent: PolicyVersionV2Document | PolicyVersionV3Document,
+  ): ReviewWarning[] {
+    return parent.reviewWarnings.filter(
+      (warning) => warning.kind === 'analysis',
+    );
+  }
+
+  /** Stores a validated draft as a pending version, once per content hash. */
+  private async insertDraft(
+    organizationId: string,
+    tenantId: string,
+    parent: PolicyVersionV2Document | PolicyVersionV3Document,
+    policy: StructuredPolicyV2OrV3,
+    actorSubject: string,
+    build: (
+      base: Pick<
+        PolicyVersionV2Document,
+        | '_id'
+        | 'organizationId'
+        | 'tenantId'
+        | 'version'
+        | 'aiWritten'
+        | 'approvalStatus'
+        | 'origin'
+        | 'createdBy'
+        | 'createdAt'
+        | 'lifecycleUpdatedAt'
+      >,
+    ) => PolicyVersionV2Document | PolicyVersionV3Document,
+  ): Promise<PolicyVersionView> {
+    const organizationObjectId = objectId(organizationId);
+    const tenantObjectId = objectId(tenantId);
+    const version = this.structuredVersionHash(policy);
+    const before: StructuredPolicyV2OrV3 = parent.structuredPolicy;
+    const parentByKey = new Map<string, string>(
+      before.endpoints.map((endpoint) => [
         endpointKey(endpoint),
         canonicalJson(endpoint as unknown as JsonValue),
       ]),
     );
-    const changedEndpoints = policy.endpoints
-      .filter(
-        (endpoint) =>
-          parentByKey.get(endpointKey(endpoint)) !==
-          canonicalJson(endpoint as unknown as JsonValue),
-      )
-      .map(endpointKey);
-    const textChanged = policy.endpoints.some((endpoint, index) => {
-      const before = parent.structuredPolicy.endpoints[index];
-      return (
-        endpoint.humanReadablePolicy !== before.humanReadablePolicy ||
-        endpoint.fields.some(
-          (field, fieldIndex) =>
-            field.humanReadablePolicy !==
-            before.fields[fieldIndex].humanReadablePolicy,
+    const changedScopes =
+      'global' in policy && 'global' in before
+        ? SCOPES.filter(
+            (scope) =>
+              canonicalJson(policy[scope] as unknown as JsonValue) !==
+              canonicalJson(before[scope] as unknown as JsonValue),
+          )
+        : [];
+    // Lists `METHOD path` of changed endpoints and `global` / `environment` for changed scopes.
+    const changedEndpoints = [
+      ...changedScopes,
+      ...(policy.endpoints as EndpointText[])
+        .filter(
+          (endpoint) =>
+            parentByKey.get(endpointKey(endpoint)) !==
+            canonicalJson(endpoint as unknown as JsonValue),
         )
-      );
-    });
+        .map(endpointKey),
+    ];
+    const beforeEndpoints = before.endpoints as EndpointText[];
+    const textChanged =
+      changedScopes.some(
+        (scope) =>
+          'global' in policy &&
+          'global' in before &&
+          policy[scope].humanReadablePolicy !==
+            before[scope].humanReadablePolicy,
+      ) ||
+      (policy.endpoints as EndpointText[]).some((endpoint, index) => {
+        const previous = beforeEndpoints[index];
+        return (
+          endpoint.humanReadablePolicy !== previous.humanReadablePolicy ||
+          endpoint.fields.some(
+            (field, fieldIndex) =>
+              field.humanReadablePolicy !==
+              previous.fields[fieldIndex].humanReadablePolicy,
+          )
+        );
+      });
 
     try {
       return await this.mongo.transaction(async (session) => {
@@ -546,22 +737,11 @@ export class PoliciesService implements OnModuleInit {
         );
         if (existing) return this.toView(existing, session);
         const now = new Date();
-        const document: PolicyVersionV2Document = {
+        const document = build({
           _id: new ObjectId(),
           organizationId: organizationObjectId,
           tenantId: tenantObjectId,
           version,
-          schemaVersion: POLICY_SCHEMA_V2,
-          toolRegistryVersion: TOOL_REGISTRY_V2,
-          structuredPolicy: policy,
-          compilationStatus: 'compiled',
-          compilationIssues: [],
-          reviewWarnings: [
-            ...parent.reviewWarnings.filter(
-              (warning) => warning.kind === 'analysis',
-            ),
-            ...this.jevContextWarnings(policy),
-          ],
           aiWritten: parent.aiWritten || textChanged,
           approvalStatus: 'pending',
           origin: {
@@ -573,7 +753,7 @@ export class PoliciesService implements OnModuleInit {
           createdBy: actorSubject,
           createdAt: now,
           lifecycleUpdatedAt: now,
-        };
+        });
         await this.versions.insertOne(document, { session });
         await this.audit.append(
           {
@@ -617,10 +797,7 @@ export class PoliciesService implements OnModuleInit {
   }
 
   /** Paths of free text in an endpoint that look like a credential. */
-  endpointSecretPaths(
-    endpoint: EndpointPolicyV2,
-    prefix = 'endpoint',
-  ): string[] {
+  endpointSecretPaths(endpoint: EndpointText, prefix = 'endpoint'): string[] {
     const paths: string[] = [];
     const check = (text: string | null, path: string) => {
       if (text && detectSecrets(text).length > 0)
@@ -730,7 +907,7 @@ export class PoliciesService implements OnModuleInit {
         };
         if (
           decision === 'approve' &&
-          document.schemaVersion === POLICY_SCHEMA_V2
+          document.schemaVersion !== 'tessera.policy/v1'
         ) {
           lifecycleChanges.approvalSource = 'manual';
         }
@@ -802,12 +979,16 @@ export class PoliciesService implements OnModuleInit {
           );
         }
         if (document.schemaVersion === POLICY_SCHEMA_V2) {
-          // ADR-0014: a later bundle schema must carry policy v2 first.
+          // ADR-0021: no bundle schema carries policy v2; tessera.bundle/v3
+          // carries policy v3, which a new analysis or a v3 draft produces.
           throw new ConflictException({
             message:
-              'BUNDLE_SCHEMA_UNAVAILABLE: tessera.policy/v2 cannot be activated until proxies accept a bundle schema that carries it',
+              'BUNDLE_SCHEMA_UNAVAILABLE: tessera.policy/v2 cannot be activated; run a new analysis to get a tessera.policy/v3 version',
             errorCode: 'BUNDLE_SCHEMA_UNAVAILABLE',
           });
+        }
+        if (!document.compiledPolicy) {
+          throw new ConflictException('The policy has no compiled form');
         }
         // Re-activating the selected policy rebuilds its bundle, which is how
         // edited runtime configuration reaches proxies.
@@ -816,7 +997,7 @@ export class PoliciesService implements OnModuleInit {
             organizationId: organizationObjectId,
             tenantId: tenantObjectId,
             policyVersion: version,
-            compiledPolicy: document.compiledPolicy!,
+            compiledPolicy: document.compiledPolicy,
             actorSubject,
           },
           session,
@@ -969,9 +1150,47 @@ export class PoliciesService implements OnModuleInit {
     document: PolicyVersionDocument,
     isActive: boolean,
   ): PolicyVersionView {
-    return document.schemaVersion === POLICY_SCHEMA_V2
-      ? this.mapViewV2(document, isActive)
-      : this.mapViewV1(document, isActive);
+    switch (document.schemaVersion) {
+      case POLICY_SCHEMA_V3:
+        return this.mapViewV3(document, isActive);
+      case POLICY_SCHEMA_V2:
+        return this.mapViewV2(document, isActive);
+      default:
+        return this.mapViewV1(document, isActive);
+    }
+  }
+
+  private mapViewV3(
+    document: PolicyVersionV3Document,
+    isActive: boolean,
+  ): PolicyVersionV3View {
+    return {
+      id: document._id.toHexString(),
+      organizationId: document.organizationId.toHexString(),
+      tenantId: document.tenantId.toHexString(),
+      version: document.version,
+      schemaVersion: document.schemaVersion,
+      toolRegistryVersion: document.toolRegistryVersion,
+      structuredPolicy: document.structuredPolicy,
+      compiledPolicy: document.compiledPolicy ?? null,
+      compilationStatus: document.compilationStatus,
+      compilationIssues: document.compilationIssues,
+      reviewWarnings: document.reviewWarnings,
+      approvalStatus: document.approvalStatus,
+      approvalSource: document.approvalSource ?? null,
+      rejectionReason: document.rejectionReason ?? null,
+      state: this.lifecycleState(document, isActive),
+      origin: document.origin,
+      precisionWarning: document.aiWritten
+        ? NATURAL_LANGUAGE_PRECISION_WARNING
+        : null,
+      activatable:
+        document.compilationStatus === 'compiled' &&
+        document.approvalStatus === 'approved',
+      createdBy: document.createdBy,
+      createdAt: document.createdAt,
+      lifecycleUpdatedAt: document.lifecycleUpdatedAt,
+    };
   }
 
   private lifecycleState(
@@ -1061,7 +1280,7 @@ export class PoliciesService implements OnModuleInit {
     } as unknown as JsonValue);
   }
 
-  private versionHashV2(policy: StructuredPolicyV2): string {
+  private structuredVersionHash(policy: StructuredPolicyV2OrV3): string {
     return this.contentHash({
       schemaVersion: policy.schemaVersion,
       toolRegistryVersion: policy.toolRegistryVersion,
@@ -1099,10 +1318,56 @@ export class PoliciesService implements OnModuleInit {
     };
   }
 
+  /** Copies only contract properties and trims free text; empty scopes stay explicit. */
+  private normalizeV3(policy: StructuredPolicyV3): StructuredPolicyV3 {
+    const text = (value: string | null) => {
+      const trimmed = value?.trim() ?? '';
+      return trimmed === '' ? null : trimmed;
+    };
+    const tool = (value: PolicyToolV3): PolicyToolV3 => ({
+      toolId: value.toolId,
+      config: value.config,
+    });
+    const scope = (value: ScopePolicyV3): ScopePolicyV3 => ({
+      humanReadablePolicy: value.humanReadablePolicy.trim(),
+      requestTools: value.requestTools.map(tool),
+      fieldTools: value.fieldTools.map((fieldTool) => ({
+        ...tool(fieldTool),
+        locations: [...fieldTool.locations],
+      })),
+      jevContext: text(value.jevContext),
+    });
+    return {
+      schemaVersion: policy.schemaVersion,
+      toolRegistryVersion: policy.toolRegistryVersion,
+      global: scope(policy.global),
+      environment: {
+        ...scope(policy.environment),
+        environmentSnapshotId: policy.environment.environmentSnapshotId,
+      },
+      endpoints: policy.endpoints.map((endpoint) => ({
+        method: endpoint.method,
+        path: endpoint.path,
+        humanReadablePolicy: endpoint.humanReadablePolicy.trim(),
+        requestTools: endpoint.requestTools.map(tool),
+        jevContext: text(endpoint.jevContext),
+        fields: endpoint.fields.map((field) => ({
+          name: field.name,
+          location: field.location,
+          type: field.type,
+          required: field.required,
+          humanReadablePolicy: field.humanReadablePolicy.trim(),
+          tools: field.tools.map(tool),
+          jevContext: text(field.jevContext),
+        })),
+      })),
+    };
+  }
+
   /** A draft keeps its parent's endpoints and fields, in the same order. */
   private shapeChanges(
-    parent: StructuredPolicyV2,
-    draft: StructuredPolicyV2,
+    parent: { endpoints: EndpointText[] },
+    draft: { endpoints: EndpointText[] },
   ): string[] {
     if (parent.endpoints.length !== draft.endpoints.length) {
       return ['endpoints: added or removed'];
@@ -1127,43 +1392,102 @@ export class PoliciesService implements OnModuleInit {
     });
   }
 
-  private secretPaths(policy: StructuredPolicyV2): string[] {
-    return policy.endpoints.flatMap((endpoint, index) =>
-      this.endpointSecretPaths(endpoint, `endpoints.${index}`),
+  /** Free text and, in v3, tool configurations that look like a credential. */
+  private secretPaths(policy: StructuredPolicyV2OrV3): string[] {
+    const paths = (policy.endpoints as EndpointText[]).flatMap(
+      (endpoint, index) =>
+        this.endpointSecretPaths(endpoint, `endpoints.${index}`),
     );
+    if (policy.schemaVersion !== POLICY_SCHEMA_V3) return paths;
+    const secret = (value: string | null) =>
+      value !== null && detectSecrets(value).length > 0;
+    const configs = (tools: PolicyToolV3[], path: string) =>
+      tools.flatMap((tool, index) =>
+        secret(canonicalJson(tool.config as unknown as JsonValue))
+          ? [`${path}.${index}.config: credential`]
+          : [],
+      );
+    for (const name of SCOPES) {
+      const scope = policy[name];
+      if (secret(scope.humanReadablePolicy)) {
+        paths.push(`${name}.humanReadablePolicy: credential`);
+      }
+      if (secret(scope.jevContext))
+        paths.push(`${name}.jevContext: credential`);
+      paths.push(
+        ...configs(scope.requestTools, `${name}.requestTools`),
+        ...configs(scope.fieldTools, `${name}.fieldTools`),
+      );
+    }
+    policy.endpoints.forEach((endpoint, index) => {
+      paths.push(
+        ...configs(endpoint.requestTools, `endpoints.${index}.requestTools`),
+        ...endpoint.fields.flatMap((field, fieldIndex) =>
+          configs(field.tools, `endpoints.${index}.fields.${fieldIndex}.tools`),
+        ),
+      );
+    });
+    return paths;
   }
 
-  private containsSecret(policy: StructuredPolicyV2): boolean {
+  private containsSecret(policy: StructuredPolicyV2OrV3): boolean {
     return this.secretPaths(policy).length > 0;
   }
 
-  private jevContextWarnings(policy: StructuredPolicyV2): ReviewWarning[] {
+  private jevContextWarnings(policy: StructuredPolicyV2OrV3): ReviewWarning[] {
     const message =
       'JEV context reads like an instruction or verdict; review it before approval.';
-    return policy.endpoints.flatMap((endpoint) => [
-      ...(endpoint.jevContext &&
-      jevContextReadsAsInstruction(endpoint.jevContext)
-        ? [
-            {
-              kind: 'jev_context' as const,
-              endpoint: endpointKey(endpoint),
-              field: null,
-              message,
-            },
-          ]
-        : []),
-      ...endpoint.fields
-        .filter(
-          (field) =>
-            field.jevContext && jevContextReadsAsInstruction(field.jevContext),
-        )
-        .map((field) => ({
-          kind: 'jev_context' as const,
-          endpoint: endpointKey(endpoint),
-          field: `${field.location}:${field.name}`,
-          message,
-        })),
-    ]);
+    const scopes =
+      policy.schemaVersion === POLICY_SCHEMA_V3
+        ? SCOPES.filter((name) => {
+            const context = policy[name].jevContext;
+            return context !== null && jevContextReadsAsInstruction(context);
+          }).map((name) => ({
+            kind: 'jev_context' as const,
+            endpoint: name,
+            field: null,
+            message,
+          }))
+        : [];
+    return [
+      ...scopes,
+      ...(policy.endpoints as EndpointText[]).flatMap((endpoint) => [
+        ...(endpoint.jevContext &&
+        jevContextReadsAsInstruction(endpoint.jevContext)
+          ? [
+              {
+                kind: 'jev_context' as const,
+                endpoint: endpointKey(endpoint),
+                field: null,
+                message,
+              },
+            ]
+          : []),
+        ...endpoint.fields
+          .filter(
+            (field) =>
+              field.jevContext &&
+              jevContextReadsAsInstruction(field.jevContext),
+          )
+          .map((field) => ({
+            kind: 'jev_context' as const,
+            endpoint: endpointKey(endpoint),
+            field: `${field.location}:${field.name}`,
+            message,
+          })),
+      ]),
+    ];
+  }
+
+  /** Steps a more specific scope replaces, so reviewers see the precedence. */
+  private overrideWarnings(compilation: CompilationResultV3): ReviewWarning[] {
+    if (!compilation.ok) return [];
+    return compilation.overrides.map((override) => ({
+      kind: 'scope_override' as const,
+      endpoint: override.endpoint ?? 'environment',
+      field: null,
+      message: override.message,
+    }));
   }
 
   private contentHash(value: JsonValue): string {

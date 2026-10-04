@@ -9,6 +9,7 @@ export const BUNDLE_SIGNATURE_ALGORITHM = 'Ed25519' as const;
 
 /** Bundle schemas this control plane can serve, newest first. */
 export const SUPPORTED_BUNDLE_SCHEMAS = [
+  'tessera.bundle/v3',
   'tessera.bundle/v2',
   BUNDLE_SCHEMA_VERSION,
 ] as const;
