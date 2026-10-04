@@ -9,7 +9,7 @@ import { Loading, Note, ProposedNote, Section, useAction, when } from '../ui';
 // The key is write-only: it is sent once, cleared from state, and never read back or displayed.
 
 function Credential<T extends { connected: boolean }>({ title, desc, path, required, fields, status, disconnectNote }: {
-  title: string; desc: string; path: string; disconnectNote: string;
+  title: string; desc: React.ReactNode; path: string; disconnectNote: string;
   required: string[] | ((values: Record<string, string>) => string[]);
   fields: (set: (k: string, v: string) => void, values: Record<string, string>) => React.ReactNode;
   status: (d: T) => string;
@@ -34,7 +34,19 @@ function Credential<T extends { connected: boolean }>({ title, desc, path, requi
         {r.status === 'missing' && <ProposedNote routes={[`GET ${full}`, `PUT ${full}`, `DELETE ${full}`]} />}
         {r.status === 'error' && <Note tone="error">{r.error}</Note>}
         {r.status === 'loading' && <Loading what={title.toLowerCase()} />}
-        {connected && r.data && <p className="small muted" style={{ margin: 0 }}>{status(r.data)}</p>}
+        {connected && r.data && !replacing && (
+          <div className="stack" style={{ gap: 'var(--space-2)' }}>
+            <div className="row" style={{ alignItems: 'flex-end', flexWrap: 'nowrap' }}>
+              {/* The key is write-only: the field only shows that one is stored. */}
+              <div className="grow" style={{ minWidth: 0 }}><Input label="API key" mono readOnly tabIndex={-1} value="••••••••••••••••" /></div>
+              {canEdit && <Button variant="outline" onClick={() => { setValues({}); setReplacing(true); }}>Replace</Button>}
+            </div>
+            <span className="spread small">
+              <span className="muted">{status(r.data)}</span>
+              {canEdit && <button type="button" className="linklike" onClick={() => setConfirm(true)}>Disconnect</button>}
+            </span>
+          </div>
+        )}
         {showForm && (
           <form className="stack" autoComplete="off" onSubmit={(e) => {
             e.preventDefault();
@@ -46,12 +58,6 @@ function Credential<T extends { connected: boolean }>({ title, desc, path, requi
               {replacing && <Button variant="ghost" onClick={() => { setReplacing(false); setValues({}); }}>Cancel</Button>}
             </div>
           </form>
-        )}
-        {canEdit && connected && !replacing && (
-          <div className="actions">
-            <Button variant="outline" onClick={() => { setValues({}); setReplacing(true); }}>Replace</Button>
-            <Button variant="ghost" onClick={() => setConfirm(true)}>Disconnect</Button>
-          </div>
         )}
       </div>
       <Dialog open={confirm} title={`Disconnect ${title}?`} onClose={() => setConfirm(false)}
@@ -71,7 +77,7 @@ const keyInput = (set: (k: string, v: string) => void, v: Record<string, string>
 export function JevIntegrationCard() {
   return (
     <Credential title="Global JEV integration" path="jev" required={['apiKey']}
-      desc="Shared by all projects. Proxies fetch it with a deployment key that has the jev-credentials:read scope."
+      desc={<>Shared by all projects. Proxies fetch it with a deployment key scoped <code className="mono">jev-credentials:read</code>.</>}
       disconnectNote="Proxies drop the key on their next fetch. Until a new key is saved, JEV is unavailable and each project applies its failure behavior."
       status={(d: JevIntegration) => `Version ${d.version ?? '—'} · updated ${when(d.updatedAt)}`}
       fields={keyInput} />

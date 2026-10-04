@@ -16,15 +16,16 @@ export function PageHead({ title, desc, children }: { title: string; desc?: Reac
   );
 }
 
-export function Section(props: { title: string; desc?: ReactNode; aside?: ReactNode; children?: ReactNode; id?: string }) {
+export function Section(props: { title: string; desc?: ReactNode; aside?: ReactNode; children?: ReactNode; foot?: ReactNode; id?: string }) {
   return (
-    <Card id={props.id} aria-label={props.title} radius="0">
+    <Card id={props.id} aria-label={props.title} radius="var(--radius-md)" padding="var(--space-5)">
       <div className="card-head">
         <h2>{props.title}</h2>
         {props.aside}
       </div>
       {props.desc ? <p className="card-desc">{props.desc}</p> : <div style={{ height: 'var(--space-4)' }} />}
       {props.children}
+      {props.foot && <div className="card-foot">{props.foot}</div>}
     </Card>
   );
 }
@@ -53,6 +54,16 @@ export function ProposedNote({ routes }: { routes: string[] }) {
 export const SEVERITY: Record<AlertSeverity, BadgeStatus> = { critical: 'blocked', warning: 'review', info: 'jev' };
 
 export const pct = (n: number | null | undefined) => (n == null ? '—' : `${(n * 100).toFixed(1)}%`);
+
+const COMPACT = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 2 });
+/** 1420000 → "1.42M"; exact below ten thousand. */
+export const num = (n: number) => (n < 10_000 ? n.toLocaleString() : COMPACT.format(n));
+
+/** Query string for a telemetry window that ends at the current minute (stable between renders). */
+export function telemetryQuery(granularity: 'minute' | 'hour', ms: number): string {
+  const to = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+  return `granularity=${granularity}&from=${encodeURIComponent(new Date(to.getTime() - ms).toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
+}
 
 /** Labelled native range slider with its value shown beside the label. */
 export function Slider(props: { label: string; hint?: string; min: number; max: number; step: number; value: number | null; digits?: number; disabled?: boolean; onChange: (n: number) => void }) {

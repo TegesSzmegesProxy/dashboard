@@ -27,7 +27,8 @@ export function ProjectAnalyses({ path }: { path: string }) {
             <thead><tr><th>Commit</th><th>Repository</th><th>Status</th><th>Source</th><th>Version</th><th>Started</th></tr></thead>
             <tbody>
               {analyses.items.map((a) => (
-                <tr key={a.id} className="link" onClick={() => setOpen(a.id)}>
+                <tr key={a.id} className="link" tabIndex={0} aria-label={`Open analysis ${short(a.commitSha)}`} onClick={() => setOpen(a.id)}
+                  onKeyDown={(ev) => (ev.key === 'Enter' || ev.key === ' ') && (ev.preventDefault(), setOpen(a.id))}>
                   <td className="mono">{short(a.commitSha)}</td>
                   <td className="mono">{a.repository?.fullName ?? '—'}</td>
                   <td><AnalysisBadge status={a.status} /></td>
