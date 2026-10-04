@@ -37,6 +37,7 @@ export const FIELD_LOCATIONS_V2 = [
 export type FieldLocationV2 = (typeof FIELD_LOCATIONS_V2)[number];
 
 export const MAX_HUMAN_READABLE_POLICY = 2_000;
+export const MAX_FIELD_HUMAN_READABLE_POLICY = 500;
 export const MAX_ENDPOINT_JEV_CONTEXT = 1_500;
 export const MAX_FIELD_JEV_CONTEXT = 500;
 export const MAX_ENDPOINTS_V2 = 500;
@@ -66,6 +67,11 @@ export class FieldPolicyV2Dto {
 
   @IsBoolean()
   required!: boolean;
+
+  /** What this field's tools check, in plain language. Never enforced. */
+  @IsString()
+  @MaxLength(MAX_FIELD_HUMAN_READABLE_POLICY)
+  humanReadablePolicy!: string;
 
   @IsArray()
   @ArrayMaxSize(MAX_TOOLS_PER_ELEMENT)
@@ -131,6 +137,7 @@ export interface FieldPolicyV2 {
   location: FieldLocationV2;
   type: string;
   required: boolean;
+  humanReadablePolicy: string;
   tools: { toolId: ToolId }[];
   jevContext: string | null;
 }
@@ -148,6 +155,17 @@ export interface StructuredPolicyV2 {
   schemaVersion: typeof POLICY_SCHEMA_V2;
   toolRegistryVersion: typeof TOOL_REGISTRY_V2;
   endpoints: EndpointPolicyV2[];
+}
+
+/**
+ * Phrases that read as instructions or verdicts aimed at the classifier
+ * rather than as a description of legitimate input (ADR-0014).
+ */
+const JEV_CONTEXT_LINT =
+  /\b(?:ignore|disregard|override|always|never)\b[^.]{0,40}\b(?:allow|block|classif|treat|flag|instruction|rule)|\b(?:classify|treat|mark|consider)\b[^.]{0,30}\b(?:as )?(?:safe|benign|harmless|trusted|attack)|\bnot an attack\b|\bsystem prompt\b/i;
+
+export function jevContextReadsAsInstruction(text: string): boolean {
+  return JEV_CONTEXT_LINT.test(text);
 }
 
 /**

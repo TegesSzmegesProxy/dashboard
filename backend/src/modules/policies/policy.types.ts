@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import type { StructuredPolicyV1Dto } from '../../contracts/policy/v1/policy.contract.js';
+import type { StructuredPolicyV2 } from '../../contracts/policy/v2/policy.contract.js';
 import type { CompiledPolicyV1 } from '../policy-compiler/policy-compiler.types.js';
 
 export type CompilationStatus = 'compiled' | 'failed';
@@ -31,7 +32,62 @@ export type PolicyVersionOrigin =
       aiModel: string;
     };
 
-export interface PolicyVersionDocument {
+/** How a `tessera.policy/v2` version was produced (ADR-0014). */
+export type PolicyVersionV2Origin =
+  | {
+      kind: 'analysis';
+      analysisId: string;
+      aiModel: string | null;
+    }
+  | {
+      /** Saved from the policy editor; `changedEndpoints` are `METHOD path`. */
+      kind: 'draft';
+      parentVersion: string;
+      analysisId: string | null;
+      changedEndpoints: string[];
+    };
+
+/** Who approved a version: a reviewer, or the standing approval of ADR-0018. */
+export type ApprovalSource = 'manual' | 'auto_apply';
+
+/** Something a reviewer should look at before approving; never a value. */
+export interface ReviewWarning {
+  /** `jev_context` is recomputed for every version; `analysis` is inherited. */
+  kind: 'analysis' | 'jev_context';
+  /** `METHOD path` of the endpoint. */
+  endpoint: string;
+  /** `location:name` of the field, or null for the endpoint itself. */
+  field: string | null;
+  message: string;
+}
+
+export interface PolicyVersionV2Document {
+  _id: ObjectId;
+  organizationId: ObjectId;
+  tenantId: ObjectId;
+  version: string;
+  schemaVersion: 'tessera.policy/v2';
+  toolRegistryVersion: 'tessera.tools/v2';
+  structuredPolicy: StructuredPolicyV2;
+  compilationStatus: CompilationStatus;
+  /** Contract paths of compilation failures; empty when compiled. */
+  compilationIssues: string[];
+  reviewWarnings: ReviewWarning[];
+  /** Some human-readable policy text was written or rewritten by AI. */
+  aiWritten: boolean;
+  approvalStatus: ApprovalStatus;
+  approvalSource?: ApprovalSource;
+  rejectionReason?: string;
+  origin: PolicyVersionV2Origin;
+  createdBy: string;
+  createdAt: Date;
+  lifecycleUpdatedAt: Date;
+}
+
+export type PolicyVersionDocument =
+  PolicyVersionV1Document | PolicyVersionV2Document;
+
+export interface PolicyVersionV1Document {
   _id: ObjectId;
   organizationId: ObjectId;
   tenantId: ObjectId;
@@ -63,7 +119,33 @@ export interface ActivePolicyPointerDocument {
   activatedAt: Date;
 }
 
-export interface PolicyVersionView {
+export type PolicyVersionView = PolicyVersionV1View | PolicyVersionV2View;
+
+export interface PolicyVersionV2View {
+  id: string;
+  organizationId: string;
+  tenantId: string;
+  version: string;
+  schemaVersion: 'tessera.policy/v2';
+  toolRegistryVersion: 'tessera.tools/v2';
+  structuredPolicy: StructuredPolicyV2;
+  compilationStatus: CompilationStatus;
+  compilationIssues: string[];
+  reviewWarnings: ReviewWarning[];
+  approvalStatus: ApprovalStatus;
+  approvalSource: ApprovalSource | null;
+  rejectionReason: string | null;
+  state: PolicyLifecycleState;
+  origin: PolicyVersionV2Origin;
+  precisionWarning: string | null;
+  /** False until a bundle schema carries policy v2 (ADR-0014). */
+  activatable: boolean;
+  createdBy: string;
+  createdAt: Date;
+  lifecycleUpdatedAt: Date;
+}
+
+export interface PolicyVersionV1View {
   id: string;
   organizationId: string;
   tenantId: string;
@@ -74,7 +156,7 @@ export interface PolicyVersionView {
   structuredPolicy: StructuredPolicyV1Dto;
   compiledPolicy: CompiledPolicyV1 | null;
   compilationStatus: CompilationStatus;
-  compilationError: PolicyVersionDocument['compilationError'] | null;
+  compilationError: PolicyVersionV1Document['compilationError'] | null;
   approvalStatus: ApprovalStatus;
   rejectionReason: string | null;
   state: PolicyLifecycleState;

@@ -11,7 +11,9 @@ export function GitHubCallback() {
   const [params] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const sent = useRef(false);
-  const orgId = params.get('state');
+  // `state` is the organization id, optionally `:<projectId>` to return to that project's Policies page.
+  const [orgId, projectId] = (params.get('state') ?? '').split(':');
+  const backTo = projectId && /^[a-f0-9]{24}$/.test(projectId) ? `/orgs/${orgId}/projects/${projectId}/policies` : `/orgs/${orgId}/settings`;
   const installationId = Number(params.get('installation_id'));
   const code = params.get('code');
 
@@ -19,10 +21,10 @@ export function GitHubCallback() {
     if (sent.current || !orgId || !installationId || !code) return;
     sent.current = true; // StrictMode runs effects twice; the OAuth code is single-use.
     api(`/organizations/${orgId}/github-installations`, { method: 'POST', body: { installationId, code } }).then(
-      () => navigate(`/orgs/${orgId}/settings`, { replace: true }),
+      () => navigate(backTo, { replace: true }),
       (e: unknown) => setError(errorText(e)),
     );
-  }, [api, navigate, orgId, installationId, code]);
+  }, [api, navigate, orgId, backTo, installationId, code]);
 
   const missing = !orgId || !installationId || !code;
   return (

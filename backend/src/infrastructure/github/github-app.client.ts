@@ -173,6 +173,35 @@ export class GitHubAppClient {
     };
   }
 
+  /** The commit at the head of the repository's default branch. */
+  async getHeadCommit(
+    installationId: number,
+    repositoryId: number,
+  ): Promise<string> {
+    const token = await this.installationToken(installationId, repositoryId);
+    const response = await this.api(
+      `/repositories/${repositoryId}/commits/HEAD`,
+      token,
+    );
+    // 409: an empty repository has no commit to analyze.
+    if (
+      response.status === 404 ||
+      response.status === 409 ||
+      response.status === 422
+    ) {
+      throw new GitHubError(
+        'REVISION_NOT_FOUND',
+        'The bound repository has no commit on its default branch',
+      );
+    }
+    if (!response.ok) throw this.upstream(response.status);
+    const body = (await response.json()) as { sha?: unknown };
+    if (typeof body.sha !== 'string' || !/^[a-f0-9]{40}$/.test(body.sha)) {
+      throw new GitHubError('UPSTREAM_ERROR', 'Unexpected GitHub response');
+    }
+    return body.sha;
+  }
+
   /** Streams the gzip tarball of one commit using a repository-scoped token. */
   async openTarball(
     installationId: number,

@@ -22,11 +22,20 @@ implements may be compiled.
   editable `humanReadablePolicy`, endpoint-level `requestTools`, a `jevContext` and
   `fields`. Each field has `name` (a dot path, with `[]` for array items),
   `location`, `type`, `required`, field-level `tools` and its own `jevContext`.
-- **The human-readable policy is never enforced.** Editing it creates an
-  `endpoint_edit` policy generation attempt. That attempt regenerates only that
-  endpoint from its stored analysis facts and produces a new pending version
-  that differs only in that endpoint. The ADR-0007 precision warning still
-  applies.
+- Each field also has a `humanReadablePolicy` (at most 500 characters). It
+  states what that field's tools check and what they cannot check yet.
+- **The human-readable policy is never enforced.** Editing the policy of an
+  endpoint or field compiles it into that endpoint's tools and JEV context.
+  - The compiler regenerates only that endpoint from its stored analysis facts
+    (an `endpoint_edit` attempt). Its result is a **preview** in the policy
+    editor's draft. The administrator accepts or discards it.
+  - The draft can also change tools and JEV context directly. It cannot add or
+    remove endpoints or fields.
+  - Saving the draft creates one new pending version. Its origin lists the
+    endpoints that changed.
+  - The ADR-0007 precision warning still applies.
+  - Until the compiler is implemented, the preview returns the endpoint
+    unchanged and says so.
 - **JEV context is free text** of bounded length (endpoint 1,500 characters,
   field 500; `null` means none). It describes the purpose of the endpoint or
   field and what legitimate input looks like.

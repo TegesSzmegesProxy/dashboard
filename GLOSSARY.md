@@ -52,8 +52,16 @@
 - **Endpoint policy**: one endpoint of a policy version: its endpoint-level
   tools, JEV context, fields and human-readable policy.
 - **Human-readable policy**: the administrator-editable plain-language
-  description of one endpoint policy. It is never enforced; editing it
-  regenerates that endpoint's structured policy as a new pending version.
+  description of one endpoint policy or one of its fields. It is never
+  enforced. Editing it compiles it into that endpoint's structured policy,
+  which the administrator accepts into a policy draft.
+- **Policy draft**: a local, unsaved set of changes to a policy version made
+  in the policy editor: human-readable policies, tools and JEV context of
+  existing endpoints and fields. Saving it creates one new pending policy
+  version; the drafted-from version never changes.
+- **Policy review mode**: chosen per analysis before it runs. `review` leaves
+  the proposed policy version pending; `auto_apply` approves it as a standing
+  approval when it compiled and nothing needs review (ADR-0018).
 - **JEV context**: bounded free text on an endpoint or field that tells JEV
   what the element is for and what legitimate input looks like. It is derived
   from untrusted repository content, reviewed with the policy, and given to
@@ -100,9 +108,13 @@
 - **JEV credential**: the organization's write-only JEV API key, stored
   encrypted and pulled by proxies with the `jev-credentials:read` deployment
   scope. It is never part of a bundle.
-- **AI model credential**: the organization's write-only default AI provider
-  and API key, stored encrypted in the control plane. It is never sent to
+- **Analysis AI model**: the model analyses and policy edits use. The
+  deployment sets it in its environment (ADR-0019); it is not stored in the
+  database or editable in the dashboard, and its key is never sent to
   proxies or included in a bundle.
+- **Dashboard-started analysis**: an analysis of the head of the bound
+  repository's default branch, started from the dashboard instead of by a
+  collector upload.
 - **Tuning settings**: a project's stored model settings, policy defaults and
   endpoint overrides. They are inputs only: saving them creates no policy
   version and changes no bundle (ADR-0011).

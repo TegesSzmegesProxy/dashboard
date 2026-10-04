@@ -76,22 +76,15 @@ Proxies fetch it from `GET /api/v1/proxy/jev-credential` with a deployment
 key that has the opt-in `jev-credentials:read` scope; `404` means no
 credential is configured. See ADR-0009.
 
-### AI model credential
+### AI model
 
-Owners and admins set the organization's default AI model key with
-`PUT /api/v1/organizations/:organizationId/integrations/ai-model`
-(`provider`: `openai` | `anthropic` with `apiKey`, or `local` with
-`baseUrl`), read its status with `GET` and disconnect it with `DELETE`. The
-key is stored like the JEV credential and never returned. Analyses use an
-`anthropic` key or a `local` model, with no fallback to the platform key
-(ADR-0015, ADR-0017). Policy generation does not use the credential yet. See
-ADR-0010.
-
-`local` sends analyses to a self-hosted model with an Anthropic-compatible
-API, without a key. By default its `baseUrl` must be a public `https` URL. To
-allow local, private or plain-`http` addresses such as
-`http://localhost:11434`, set `AI_MODEL_ALLOW_PRIVATE_BASE_URL=true`. Use this
-only on a self-hosted control plane. See ADR-0017.
+The deployment chooses the model in its environment (ADR-0019); the dashboard
+cannot change it. Set `ANTHROPIC_API_KEY`, or `ANALYSIS_AI_BASE_URL` to use a
+self-hosted model with an Anthropic-compatible API (no key is sent to it, and
+redirects are refused). `ANTHROPIC_ANALYSIS_MODEL` and
+`ANTHROPIC_POLICY_MODEL` name the models. Without a key or a URL, analyses
+cannot start. `GET .../projects/:tenantId/analysis-readiness` shows the model,
+whether the sandbox is configured and any unfinished analysis, never a key.
 
 ### Project tuning settings
 
@@ -110,7 +103,9 @@ Analyses are agentic and sandboxed (ADR-0013 to ADR-0016):
 1. Collectors send `POST /api/v1/tenants/:tenantId/analysis-uploads` with a
    collector key, an `Idempotency-Key`, and a `tessera.analysis-upload/v1`
    body. Only the commit SHA starts the analysis; the environment section is
-   summarized, not stored.
+   summarized, not stored. An owner or admin can instead start one from the
+   dashboard with `POST .../projects/:tenantId/analyses` (`Idempotency-Key`),
+   which analyzes the head of the bound repository's default branch (ADR-0019).
 2. Environment context comes from `tessera -get-environment`, which posts
    httpx, Lynis, nmap, nuclei and Trivy results to
    `POST /api/v1/tenants/:tenantId/environment-snapshots` (collector key with
@@ -121,10 +116,7 @@ Analyses are agentic and sandboxed (ADR-0013 to ADR-0016):
    per-job sandbox (`ANALYSIS_SANDBOX`) that indexes it for any language,
    without network access or credentials. It then estimates the cost and
    waits in `awaiting_budget`.
-4. An owner or admin connects the organization's Anthropic key
-   (`PUT /api/v1/organizations/:organizationId/integrations/ai-model` with
-   `provider: anthropic`; needs `CREDENTIAL_ENCRYPTION_KEY`, see ADR-0010) and
-   approves a ceiling with
+4. An owner or admin approves a ceiling with
    `POST .../analyses/:analysisId/budget-approval` (`ceilingUsd`,
    `Idempotency-Key`). `PUT .../projects/:tenantId/analysis-settings` can set
    an explicit auto-approve ceiling.

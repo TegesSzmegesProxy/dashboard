@@ -24,6 +24,10 @@ export type ToolScope = (typeof TOOL_SCOPES)[number];
 
 export interface ToolDefinition {
   id: string;
+  /** Short name for people, e.g. in the policy editor. */
+  label: string;
+  /** What the proxy checks, in one plain sentence. */
+  summary: string;
   category: ToolCategory;
   scope: ToolScope;
   /** When an analysis should choose the tool; shown to the model. */
@@ -38,6 +42,8 @@ export interface ToolDefinition {
 export const TOOL_DEFINITIONS = [
   {
     id: 'string_length',
+    label: 'Length limit',
+    summary: 'Rejects values that are longer or shorter than the proxy allows.',
     category: 'schema',
     scope: 'field',
     stateful: false,
@@ -46,6 +52,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'zod_type_check',
+    label: 'Type check',
+    summary: 'Rejects values that are not of the expected type.',
     category: 'schema',
     scope: 'field',
     stateful: false,
@@ -54,6 +62,9 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'integer_range',
+    label: 'Integer range',
+    summary:
+      'Rejects integers outside the allowed range, such as negative ids.',
     category: 'schema',
     scope: 'field',
     stateful: false,
@@ -62,6 +73,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'json_schema',
+    label: 'JSON shape',
+    summary: 'Rejects JSON bodies that do not match the expected structure.',
     category: 'schema',
     scope: 'full',
     stateful: false,
@@ -70,6 +83,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'mime_type',
+    label: 'File type',
+    summary: 'Rejects uploaded files whose content type is not allowed.',
     category: 'schema',
     scope: 'file',
     stateful: false,
@@ -78,6 +93,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'sql_injection',
+    label: 'SQL injection',
+    summary: 'Detects SQL injection payloads.',
     category: 'injection',
     scope: 'field',
     stateful: false,
@@ -86,6 +103,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'command_injection',
+    label: 'Command injection',
+    summary: 'Detects shell command injection payloads.',
     category: 'injection',
     scope: 'field',
     stateful: false,
@@ -94,6 +113,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'xss',
+    label: 'Cross-site scripting',
+    summary: 'Detects script or HTML injection payloads.',
     category: 'injection',
     scope: 'field',
     stateful: false,
@@ -102,6 +123,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'path_traversal',
+    label: 'Path traversal',
+    summary: 'Detects attempts to escape a directory, such as ../ sequences.',
     category: 'injection',
     scope: 'field',
     stateful: false,
@@ -110,6 +133,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'null_byte',
+    label: 'Null byte',
+    summary: 'Rejects values that contain NUL bytes.',
     category: 'injection',
     scope: 'field',
     stateful: false,
@@ -118,6 +143,9 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'control_character',
+    label: 'Control characters',
+    summary:
+      'Rejects values that contain control characters such as line breaks in headers.',
     category: 'injection',
     scope: 'field',
     stateful: false,
@@ -126,6 +154,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'url_validator',
+    label: 'URL format',
+    summary: 'Rejects values that are not well-formed URLs.',
     category: 'url',
     scope: 'field',
     stateful: false,
@@ -133,6 +163,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'ssrf',
+    label: 'Server-side request forgery',
+    summary: 'Detects URLs that point at internal or metadata addresses.',
     category: 'url',
     scope: 'field',
     stateful: false,
@@ -141,6 +173,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'file_size',
+    label: 'File size',
+    summary: 'Rejects uploaded files above the size limit.',
     category: 'resource',
     scope: 'file',
     stateful: false,
@@ -148,6 +182,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'archive_expansion_ratio',
+    label: 'Archive bomb',
+    summary: 'Rejects archives that expand far beyond their compressed size.',
     category: 'resource',
     scope: 'file',
     stateful: false,
@@ -156,6 +192,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'request_size',
+    label: 'Request size',
+    summary: 'Rejects request bodies above the size limit.',
     category: 'resource',
     scope: 'full',
     stateful: false,
@@ -164,6 +202,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'rate_limit',
+    label: 'Rate limiting',
+    summary: 'Limits how often one client may call the endpoint.',
     category: 'resource',
     scope: 'full',
     stateful: true,
@@ -172,6 +212,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'duplicate_request',
+    label: 'Replay protection',
+    summary: 'Detects the same request being sent again.',
     category: 'anomaly',
     scope: 'full',
     stateful: true,
@@ -180,6 +222,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'sequence_analysis',
+    label: 'Sequence analysis',
+    summary: 'Detects enumeration and brute-force patterns across requests.',
     category: 'anomaly',
     scope: 'full',
     stateful: true,
@@ -188,6 +232,9 @@ export const TOOL_DEFINITIONS = [
   },
   {
     id: 'private_ip',
+    label: 'Private address',
+    summary:
+      'Rejects requests that carry private or internal network addresses.',
     category: 'anomaly',
     scope: 'full',
     stateful: false,

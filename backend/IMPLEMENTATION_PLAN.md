@@ -34,7 +34,7 @@ src/
     policy-compiler/       structured policy to registered toolchain
     approvals/             approve/reject workflow
     bundles/               activation, signing and distribution
-    integrations/          organization integration credentials (JEV, AI model)
+    integrations/          organization integration credentials (JEV)
     tuning/                project model settings, policy defaults, endpoint overrides
     telemetry/             redacted summaries and proxy health
     audit/                 immutable administrative audit trail
@@ -92,8 +92,8 @@ trusted as authorization.
   caching and outbox delivery coordination.
 - Collector uploads are stored as metadata only. Repository source exists
   only inside the per-job analysis sandbox and is never persisted (ADR-0013).
-- Customer AI keys live in a secret manager behind `SecretStore`; MongoDB
-  holds only references and fingerprints (ADR-0015).
+- The AI model key is a deployment secret in the environment, never in
+  MongoDB (ADR-0019).
 - Signing uses Ed25519. The private key comes from a secret manager or
   deployment secret and is never stored in MongoDB.
 - External AI access is hidden behind a provider-independent interface with
@@ -303,7 +303,7 @@ Decision: see ADR-0013 (accepted) and ADR-0014 (proposed until the tool
 list is confirmed).
 
 Status: M0-M6 and the M8 analysis routes are implemented:
-- contracts, environment snapshots, organization AI keys with a secret store;
+- contracts, environment snapshots, the deployment-configured AI model (ADR-0019);
 - the sandbox and `repo-host` with the language-agnostic index and the Express
   and NestJS pack;
 - the agent loop with enforced budgets, prompts, and the estimate, recon,
@@ -316,9 +316,22 @@ budget enforcement, coverage gate, reconciliation and environment ingestion.
 Not yet exercised: the Docker sandbox (no Docker access in development), a live
 GitHub App and a real model.
 
+M7 is partly implemented:
+- `tessera.policy/v2` versions are committed with their analysis, with field
+  human-readable policies.
+- The policy editor saves drafts as new pending versions
+  (`POST policies/v2`).
+- Approval and rejection work for v2, as does the standing approval of
+  ADR-0018.
+- `POST policies/v2/compile` exists, but the compiler is a placeholder (TODO in
+  `PolicyGenerationService.compileHumanReadablePolicy`) that does not
+  regenerate tools.
+- Activation of v2 returns `BUNDLE_SCHEMA_UNAVAILABLE`.
+
 Next:
-- M7: v2 policy versions from proposals, per-endpoint edits and the bundle
-  schema for policy v2 (not `tessera.bundle/v2`, see ADR-0014).
+- M7: the per-endpoint `endpoint_edit` compiler behind `policies/v2/compile`,
+  and the bundle schema for policy v2 (not `tessera.bundle/v2`, see
+  ADR-0014).
 - M9: verification pass and incremental re-analysis.
 - Analysis does not set endpoint `sampling` yet.
 
@@ -355,13 +368,12 @@ only after an explicit project decision changes this policy.
 7. Collector upload contents, file allowlist, retention and storage are
    defined by ADR-0006, with source handling replaced by ADR-0013. Data
    residency for AI processing is not yet decided.
-8. The organization AI model credential (ADR-0010) is consumed by analyses
-   (ADR-0015): an Anthropic key is required, and analyses never fall back to
-   the platform `ANTHROPIC_API_KEY`. The `custom` provider is replaced by
-   `local`, a keyless Anthropic-compatible endpoint that analyses can also
-   use (ADR-0017). Still open: whether the credential also replaces the
-   platform key for policy generation, and how the `openai` provider is
-   supported.
+8. The AI model is chosen by the deployment in its environment (ADR-0019):
+   `ANTHROPIC_API_KEY` or `ANALYSIS_AI_BASE_URL` (a keyless self-hosted
+   model), with `ANTHROPIC_ANALYSIS_MODEL` and `ANTHROPIC_POLICY_MODEL`. The
+   per-organization credential of ADR-0010 and ADR-0017 is removed. Still
+   open: cost and abuse controls for a hosted deployment where the operator
+   pays, and support for other providers.
 9. Project tuning settings are stored per ADR-0011 but not yet consumed.
    Open: which model the model settings configure (JEV runtime
    classification or policy generation), and how policy defaults and endpoint

@@ -581,43 +581,6 @@ paths:
         - bearer: []
       tags:
         - source repositories
-  /api/v1/organizations/{organizationId}/integrations/ai-model:
-    get:
-      operationId: AiModelCredentialController_get
-      parameters: []
-      responses:
-        '200':
-          description: ''
-      security:
-        - bearer: []
-      tags:
-        - integrations
-    put:
-      operationId: AiModelCredentialController_set
-      parameters: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PutAiModelCredentialDto'
-      responses:
-        '200':
-          description: ''
-      security:
-        - bearer: []
-      tags:
-        - integrations
-    delete:
-      operationId: AiModelCredentialController_remove
-      parameters: []
-      responses:
-        '204':
-          description: ''
-      security:
-        - bearer: []
-      tags:
-        - integrations
   /api/v1/organizations/{organizationId}/integrations/jev:
     get:
       operationId: JevCredentialController_get
@@ -796,6 +759,42 @@ paths:
   /api/v1/organizations/{organizationId}/projects/{tenantId}/analyses:
     get:
       operationId: AnalysesController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
+    post:
+      operationId: AnalysesController_start
+      summary: Starts an analysis of the bound repository's default branch head
+      description: >-
+        Runs like a collector-started analysis (estimate, budget approval, model
+        phase) without an upload, and uses the latest environment snapshot when
+        one exists. Fails with 409 AI_NOT_CONFIGURED, SANDBOX_NOT_CONFIGURED,
+        REPOSITORY_NOT_BOUND or ANALYSIS_IN_PROGRESS.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/analysis-readiness:
+    get:
+      operationId: AnalysesController_readiness
+      summary: What this deployment provides for analyses
+      description: >-
+        The AI model chosen in the control plane's environment (never a key) and
+        whether the analysis sandbox is configured.
       parameters: []
       responses:
         '200':
@@ -1566,33 +1565,6 @@ components:
         - installationId
         - owner
         - name
-    PutAiModelCredentialDto:
-      type: object
-      properties:
-        provider:
-          type: string
-          enum:
-            - openai
-            - anthropic
-            - local
-        apiKey:
-          type: string
-          description: >-
-            AI model provider API key, required for openai and anthropic and
-            not accepted for local. Write-only: it is encrypted at rest and
-            never returned to the dashboard.
-          writeOnly: true
-        baseUrl:
-          type: string
-          description: >-
-            Endpoint of a local model with an Anthropic-compatible API, for
-            example http://localhost:11434. Required for local and not
-            accepted for other providers. Local, private and plain-http
-            addresses are accepted only when the control plane sets
-            AI_MODEL_ALLOW_PRIVATE_BASE_URL.
-          example: http://localhost:11434
-      required:
-        - provider
     PutJevCredentialDto:
       type: object
       properties:

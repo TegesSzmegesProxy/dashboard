@@ -4,7 +4,7 @@ import { useApi, useResource, type ApiKey, type GitHubInstallation, type Members
 import { Badge, Button, Dialog, IconButton, Input, StatTile } from '../components';
 import { useOrg } from '../Layout';
 import { Note, PageHead, Section, useAction, when } from '../ui';
-import { AiModelCard, JevIntegrationCard } from './Integrations';
+import { JevIntegrationCard } from './Integrations';
 import { emptyRuntime, RuntimeConfigFields, validateRuntime, type RuntimeDraft } from './RuntimeConfigFields';
 
 const count = (p: Page<unknown> | null) => (p ? `${p.items.length}${p.nextCursor ? '+' : ''}` : '—');
@@ -124,7 +124,6 @@ export function Dashboard() {
 
         <div className="col">
           <JevIntegrationCard />
-          <AiModelCard />
           <Section title="Source repositories" desc="Analysis source is fetched from GitHub through a linked installation."
             aside={<Badge status={installs.data?.length ? 'passed' : 'review'}>{installs.data?.length ? 'Linked' : 'Not linked'}</Badge>}>
             {installs.data?.length ? (

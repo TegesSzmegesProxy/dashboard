@@ -4,6 +4,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import { AnyBulkWriteOperation, ClientSession, ObjectId } from 'mongodb';
 import { canonicalJson, JsonValue } from '../../common/canonical-json.js';
@@ -14,19 +15,25 @@ import {
 } from '../../common/cursor-pagination.js';
 import { assertIdempotencyKey } from '../../common/idempotency-key.js';
 import { isDuplicateKey, objectId } from '../../common/mongodb.js';
+import { Environment } from '../../config/environment.js';
 import { ANALYSIS_SCHEMA_V2 } from '../../contracts/analysis/v2/analysis-agent.contract.js';
+import { AnalysisAiService } from '../../infrastructure/ai/analysis-ai.service.js';
 import { EMPTY_USAGE } from '../../infrastructure/ai/pricing.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { OutboxService } from '../events/outbox.service.js';
-import { AiModelCredentialService } from '../integrations/ai-model-credential.service.js';
 import { ProjectsService } from '../projects/projects.service.js';
+import { SourceRepositoriesService } from '../source-repositories/source-repositories.service.js';
 import type {
   AnalysisDocument,
+  AnalysisReadinessView,
   AnalysisSettingsDocument,
   AnalysisStatus,
+  AnalysisSettingsView,
   AnalysisSummaryView,
   AnalysisView,
+  PolicyReviewChoice,
+  PolicyReviewMode,
   WorkItemDocument,
   WorkItemView,
 } from './analysis.types.js';
@@ -34,14 +41,25 @@ import type {
 export interface EnqueueAnalysisInput {
   organizationId: ObjectId;
   tenantId: ObjectId;
-  uploadId: ObjectId;
+  /** Null when the dashboard starts the analysis; then `startedBy` is set. */
+  uploadId: ObjectId | null;
   commitSha: string;
+  startedBy?: string;
+  startKeyHash?: string;
 }
 
 /** The worker lost its lease; another instance owns the job now. */
 export class LeaseLostError extends Error {}
 
 const MAX_CEILING_USD = 10_000;
+
+/** Statuses of an analysis that has not reached a final result. */
+const UNFINISHED_STATUSES: AnalysisStatus[] = [
+  'queued',
+  'running',
+  'awaiting_budget',
+  'paused',
+];
 
 @Injectable()
 export class AnalysesService implements OnModuleInit {
@@ -50,12 +68,21 @@ export class AnalysesService implements OnModuleInit {
     private readonly outbox: OutboxService,
     private readonly audit: AuditService,
     private readonly projects: ProjectsService,
-    private readonly credentials: AiModelCredentialService,
+    private readonly ai: AnalysisAiService,
+    private readonly repositories: SourceRepositoriesService,
+    private readonly config: ConfigService<Environment, true>,
   ) {}
 
   async onModuleInit(): Promise<void> {
     await Promise.all([
-      this.analyses.createIndex({ uploadId: 1 }, { unique: true }),
+      this.ensureUploadIndex(),
+      this.analyses.createIndex(
+        { organizationId: 1, tenantId: 1, startKeyHash: 1 },
+        {
+          unique: true,
+          partialFilterExpression: { startKeyHash: { $type: 'string' } },
+        },
+      ),
       this.analyses.createIndex({ organizationId: 1, tenantId: 1, _id: 1 }),
       this.analyses.createIndex({ status: 1, availableAt: 1 }),
       this.workItems.createIndex({ analysisId: 1, key: 1 }, { unique: true }),
@@ -78,6 +105,8 @@ export class AnalysesService implements OnModuleInit {
       organizationId: input.organizationId,
       tenantId: input.tenantId,
       uploadId: input.uploadId,
+      ...(input.startedBy ? { startedBy: input.startedBy } : {}),
+      ...(input.startKeyHash ? { startKeyHash: input.startKeyHash } : {}),
       commitSha: input.commitSha,
       schemaVersion: ANALYSIS_SCHEMA_V2,
       status: 'queued',
@@ -97,6 +126,8 @@ export class AnalysesService implements OnModuleInit {
       readManifest: null,
       results: null,
       version: null,
+      policyReview: null,
+      policy: null,
       errorCode: null,
       createdAt: now,
       startedAt: null,
@@ -110,7 +141,9 @@ export class AnalysesService implements OnModuleInit {
       document._id.toHexString(),
       {
         analysisId: document._id.toHexString(),
-        uploadId: input.uploadId.toHexString(),
+        ...(input.uploadId
+          ? { uploadId: input.uploadId.toHexString() }
+          : { startedBy: input.startedBy ?? '' }),
         commitSha: input.commitSha,
       },
       session,
@@ -128,6 +161,134 @@ export class AnalysesService implements OnModuleInit {
   }
 
   /* ---------- dashboard operations ---------- */
+
+  /** What this deployment provides for analyses; no secret is included. */
+  async readiness(
+    organizationId: string,
+    tenantId: string,
+  ): Promise<AnalysisReadinessView> {
+    const active = await this.analyses.findOne(
+      {
+        organizationId: objectId(organizationId),
+        tenantId: objectId(tenantId),
+        status: { $in: UNFINISHED_STATUSES },
+      },
+      { projection: { status: 1 } },
+    );
+    return {
+      ai: this.ai.status,
+      sandboxConfigured:
+        this.config.get('ANALYSIS_SANDBOX', { infer: true }) !== undefined,
+      activeAnalysis: active
+        ? { id: active._id.toHexString(), status: active.status }
+        : null,
+    };
+  }
+
+  /**
+   * Starts an analysis of the head of the bound repository's default branch,
+   * without a collector upload. It runs like any other analysis: estimate,
+   * budget approval, then the model phase, and it uses the latest environment
+   * snapshot when one exists.
+   */
+  async startFromRepository(
+    organizationId: string,
+    tenantId: string,
+    idempotencyKey: string | undefined,
+    actorSubject: string,
+  ): Promise<AnalysisSummaryView> {
+    assertIdempotencyKey(idempotencyKey);
+    const organizationObjectId = objectId(organizationId);
+    const tenantObjectId = objectId(tenantId);
+    const startKeyHash = this.sha256(`dashboard-start:${idempotencyKey}`);
+    const prior = await this.analyses.findOne({
+      organizationId: organizationObjectId,
+      tenantId: tenantObjectId,
+      startKeyHash,
+    });
+    if (prior) return this.toSummary(prior);
+
+    await this.projects.assertBelongToOrganization(organizationId, [tenantId]);
+    const readiness = await this.readiness(organizationId, tenantId);
+    if (!readiness.ai.configured) {
+      throw new ConflictException({
+        message:
+          'No AI model is configured for this control plane; set ANTHROPIC_API_KEY or ANALYSIS_AI_BASE_URL',
+        errorCode: 'AI_NOT_CONFIGURED',
+      });
+    }
+    if (!readiness.sandboxConfigured) {
+      throw new ConflictException({
+        message:
+          'The analysis sandbox is not configured for this control plane; set ANALYSIS_SANDBOX',
+        errorCode: 'SANDBOX_NOT_CONFIGURED',
+      });
+    }
+    if (readiness.activeAnalysis) {
+      throw new ConflictException({
+        message: 'An analysis of this project is already in progress',
+        errorCode: 'ANALYSIS_IN_PROGRESS',
+        analysisId: readiness.activeAnalysis.id,
+      });
+    }
+    const head = await this.repositories.resolveHead(
+      organizationObjectId,
+      tenantObjectId,
+    );
+    if (!head) {
+      throw new ConflictException({
+        message: 'Bind a GitHub repository to this project first',
+        errorCode: 'REPOSITORY_NOT_BOUND',
+      });
+    }
+    try {
+      const analysisId = await this.mongo.transaction(async (session) => {
+        const id = await this.enqueue(
+          {
+            organizationId: organizationObjectId,
+            tenantId: tenantObjectId,
+            uploadId: null,
+            commitSha: head.commitSha,
+            startedBy: actorSubject,
+            startKeyHash,
+          },
+          session,
+        );
+        await this.audit.append(
+          {
+            organizationId: organizationObjectId,
+            tenantId: tenantObjectId,
+            actorSubject,
+            action: 'analysis.started',
+            targetType: 'analysis',
+            targetId: id.toHexString(),
+            metadata: {
+              repository: head.source.fullName,
+              commitSha: head.commitSha,
+            },
+          },
+          session,
+        );
+        return id;
+      });
+      return this.toSummary(
+        await this.findOwned(
+          organizationId,
+          tenantId,
+          analysisId.toHexString(),
+        ),
+      );
+    } catch (error) {
+      if (!isDuplicateKey(error)) throw error;
+      const raced = await this.analyses.findOne({
+        organizationId: organizationObjectId,
+        tenantId: tenantObjectId,
+        startKeyHash,
+      });
+      if (!raced) throw error;
+      return this.toSummary(raced);
+    }
+  }
 
   async list(
     organizationId: string,
@@ -220,6 +381,7 @@ export class AnalysesService implements OnModuleInit {
     tenantId: string,
     analysisId: string,
     ceilingUsd: number,
+    policyReviewMode: PolicyReviewMode,
     idempotencyKey: string | undefined,
     actorSubject: string,
   ): Promise<AnalysisSummaryView> {
@@ -243,11 +405,9 @@ export class AnalysesService implements OnModuleInit {
         `The ceiling must be above 0 and at most ${MAX_CEILING_USD} USD`,
       );
     }
-    if (
-      !(await this.credentials.hasAnalysisCredential(document.organizationId))
-    ) {
+    if (!this.ai.status.configured) {
       throw new ConflictException(
-        'Connect an Anthropic API key or a local model for the organization before approving a budget',
+        'No AI model is configured for this control plane; set ANTHROPIC_API_KEY or ANALYSIS_AI_BASE_URL',
       );
     }
     const now = new Date();
@@ -267,6 +427,11 @@ export class AnalysesService implements OnModuleInit {
               approvedAt: now,
               source: 'manual',
             },
+            policyReview: {
+              mode: policyReviewMode,
+              chosenBy: actorSubject,
+              chosenAt: now,
+            },
           },
         },
         { session },
@@ -282,7 +447,11 @@ export class AnalysesService implements OnModuleInit {
           action: 'analysis.budget-approved',
           targetType: 'analysis',
           targetId: document._id.toHexString(),
-          metadata: { ceilingUsd: String(ceilingUsd), requestHash },
+          metadata: {
+            ceilingUsd: String(ceilingUsd),
+            policyReviewMode,
+            requestHash,
+          },
         },
         session,
       );
@@ -347,20 +516,24 @@ export class AnalysesService implements OnModuleInit {
   async getSettings(
     organizationId: string,
     tenantId: string,
-  ): Promise<{ autoApproveCeilingUsd: number | null }> {
+  ): Promise<AnalysisSettingsView> {
     const settings = await this.settings.findOne({
       organizationId: objectId(organizationId),
       tenantId: objectId(tenantId),
     });
-    return { autoApproveCeilingUsd: settings?.autoApproveCeilingUsd ?? null };
+    return {
+      autoApproveCeilingUsd: settings?.autoApproveCeilingUsd ?? null,
+      defaultPolicyReviewMode: settings?.defaultPolicyReviewMode ?? 'review',
+    };
   }
 
   async setSettings(
     organizationId: string,
     tenantId: string,
     autoApproveCeilingUsd: number | null,
+    defaultPolicyReviewMode: PolicyReviewMode | undefined,
     actorSubject: string,
-  ): Promise<{ autoApproveCeilingUsd: number | null }> {
+  ): Promise<AnalysisSettingsView> {
     if (
       autoApproveCeilingUsd !== null &&
       !(autoApproveCeilingUsd > 0 && autoApproveCeilingUsd <= MAX_CEILING_USD)
@@ -382,6 +555,7 @@ export class AnalysesService implements OnModuleInit {
         {
           $set: {
             autoApproveCeilingUsd,
+            ...(defaultPolicyReviewMode ? { defaultPolicyReviewMode } : {}),
             updatedBy: actorSubject,
             updatedAt: new Date(),
           },
@@ -402,12 +576,13 @@ export class AnalysesService implements OnModuleInit {
               autoApproveCeilingUsd === null
                 ? 'none'
                 : String(autoApproveCeilingUsd),
+            ...(defaultPolicyReviewMode ? { defaultPolicyReviewMode } : {}),
           },
         },
         session,
       );
     });
-    return { autoApproveCeilingUsd };
+    return this.getSettings(organizationId, tenantId);
   }
 
   /* ---------- worker persistence ---------- */
@@ -418,6 +593,22 @@ export class AnalysesService implements OnModuleInit {
   ): Promise<number | null> {
     const settings = await this.settings.findOne({ organizationId, tenantId });
     return settings?.autoApproveCeilingUsd ?? null;
+  }
+
+  /**
+   * The review mode for an analysis whose budget was approved automatically:
+   * the project default, attributed to whoever last saved the settings.
+   */
+  async defaultPolicyReview(
+    organizationId: ObjectId,
+    tenantId: ObjectId,
+  ): Promise<PolicyReviewChoice> {
+    const settings = await this.settings.findOne({ organizationId, tenantId });
+    return {
+      mode: settings?.defaultPolicyReviewMode ?? 'review',
+      chosenBy: settings?.updatedBy ?? 'system:auto-approve',
+      chosenAt: new Date(),
+    };
   }
 
   /** Writes progress only while the worker still holds the lease. */
@@ -516,7 +707,8 @@ export class AnalysesService implements OnModuleInit {
       id: document._id.toHexString(),
       organizationId: document.organizationId.toHexString(),
       tenantId: document.tenantId.toHexString(),
-      uploadId: document.uploadId.toHexString(),
+      uploadId: document.uploadId?.toHexString() ?? null,
+      startedBy: document.startedBy ?? null,
       commitSha: document.commitSha,
       status: document.status,
       phase: document.phase,
@@ -527,11 +719,34 @@ export class AnalysesService implements OnModuleInit {
       usage: document.usage,
       environment: document.environment,
       steps: document.steps,
+      policyReview: document.policyReview ?? null,
+      policy: document.policy ?? null,
       errorCode: document.errorCode,
       createdAt: document.createdAt,
       startedAt: document.startedAt,
       finishedAt: document.finishedAt,
     };
+  }
+
+  /**
+   * An analysis is unique per collector upload; dashboard-started ones have
+   * no upload. Earlier versions created a plain unique index, which would
+   * reject a second null, so it is replaced by a partial one.
+   */
+  private async ensureUploadIndex(): Promise<void> {
+    try {
+      await this.analyses.dropIndex('uploadId_1');
+    } catch {
+      // Already replaced, or the collection does not exist yet.
+    }
+    await this.analyses.createIndex(
+      { uploadId: 1 },
+      {
+        name: 'uploadId_unique_when_set',
+        unique: true,
+        partialFilterExpression: { uploadId: { $type: 'objectId' } },
+      },
+    );
   }
 
   private sha256(value: string): string {

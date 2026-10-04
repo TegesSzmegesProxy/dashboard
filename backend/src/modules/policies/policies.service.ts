@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   OnModuleInit,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { ClientSession, ObjectId } from 'mongodb';
@@ -15,11 +16,19 @@ import {
 } from '../../common/cursor-pagination.js';
 import { assertIdempotencyKey } from '../../common/idempotency-key.js';
 import { isDuplicateKey, objectId } from '../../common/mongodb.js';
+import { detectSecrets } from '../../common/secret-detection.js';
 import { NATURAL_LANGUAGE_PRECISION_WARNING } from '../../contracts/policy-generation/v1/ai-policy.contract.js';
 import {
   StructuredPolicyV1Dto,
   TOOL_REGISTRY_VERSION,
 } from '../../contracts/policy/v1/policy.contract.js';
+import {
+  EndpointPolicyV2,
+  jevContextReadsAsInstruction,
+  POLICY_SCHEMA_V2,
+  StructuredPolicyV2,
+} from '../../contracts/policy/v2/policy.contract.js';
+import { TOOL_REGISTRY_V2 } from '../../contracts/tools/v2/tool-registry.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { BundlesService } from '../bundles/bundles.service.js';
@@ -27,13 +36,46 @@ import { OutboxService } from '../events/outbox.service.js';
 import { PolicyCompilerService } from '../policy-compiler/policy-compiler.service.js';
 import type { CompiledPolicyV1 } from '../policy-compiler/policy-compiler.types.js';
 import { ProjectsService } from '../projects/projects.service.js';
-import { ImportPolicyDto } from './policy.dto.js';
+import { ImportPolicyDto, SavePolicyDraftDto } from './policy.dto.js';
 import {
   ActivePolicyPointerDocument,
   PolicyVersionDocument,
   PolicyVersionOrigin,
+  PolicyVersionV1Document,
+  PolicyVersionV2Document,
+  PolicyVersionV2View,
   PolicyVersionView,
+  ReviewWarning,
 } from './policy.types.js';
+
+/** A pending `tessera.policy/v2` proposal committed with its analysis. */
+export interface AnalysisPolicyVersionInput {
+  organizationId: ObjectId;
+  tenantId: ObjectId;
+  analysisId: ObjectId;
+  aiModel: string | null;
+  structuredPolicy: StructuredPolicyV2;
+  /** Reconciliation warnings, confidence and inferred tools (kind `analysis`). */
+  analysisWarnings: ReviewWarning[];
+  /**
+   * Set when the analysis was started with `auto_apply` (ADR-0018): the
+   * subject who chose it. The version is approved only when it compiled and
+   * has no review warning.
+   */
+  autoApplyBy: string | null;
+}
+
+export interface AnalysisPolicyVersionResult {
+  version: string;
+  created: boolean;
+  approved: boolean;
+  /** Why a requested automatic approval did not happen. */
+  autoApplySkipped: string | null;
+}
+
+/** Endpoint key used in diffs, warnings and telemetry. */
+const endpointKey = (endpoint: { method: string; path: string }) =>
+  `${endpoint.method} ${endpoint.path}`;
 
 export interface GeneratedPolicyVersionInput {
   organizationId: ObjectId;
@@ -283,19 +325,317 @@ export class PoliciesService implements OnModuleInit {
       {
         projection: {
           version: 1,
+          schemaVersion: 1,
           humanReadableIntent: 1,
           structuredPolicy: 1,
           origin: 1,
         },
       },
     );
-    if (!document) return null;
+    // Natural-language edits of whole policies exist only for v1.
+    if (!document || document.schemaVersion !== 'tessera.policy/v1')
+      return null;
     return {
       version: document.version,
       humanReadableIntent: document.humanReadableIntent,
       structuredPolicy: document.structuredPolicy,
       origin: document.origin ?? { kind: 'import' },
     };
+  }
+
+  /**
+   * Stores the analysis proposal as a pending v2 version inside the
+   * analysis' own transaction, and applies a standing approval when one was
+   * chosen and nothing needs review (ADR-0018).
+   */
+  async createV2FromAnalysis(
+    input: AnalysisPolicyVersionInput,
+    session: ClientSession,
+  ): Promise<AnalysisPolicyVersionResult> {
+    const policy = input.structuredPolicy;
+    const version = this.versionHashV2(policy);
+    const existing = await this.versions.findOne(
+      {
+        organizationId: input.organizationId,
+        tenantId: input.tenantId,
+        version,
+      },
+      { session, projection: { _id: 1, approvalStatus: 1 } },
+    );
+    if (existing) {
+      return {
+        version,
+        created: false,
+        approved: existing.approvalStatus === 'approved',
+        autoApplySkipped: input.autoApplyBy
+          ? 'An identical policy version already exists.'
+          : null,
+      };
+    }
+    const compilation = this.compiler.compileV2(policy);
+    const reviewWarnings = [
+      ...input.analysisWarnings,
+      ...this.jevContextWarnings(policy),
+    ];
+    const autoApplySkipped = !input.autoApplyBy
+      ? null
+      : !compilation.ok
+        ? 'The proposal did not compile.'
+        : this.containsSecret(policy)
+          ? 'The proposal contains text that looks like a credential.'
+          : reviewWarnings.length > 0
+            ? `${reviewWarnings.length} review warning(s) need a reviewer.`
+            : null;
+    const approve = input.autoApplyBy !== null && autoApplySkipped === null;
+    const now = new Date();
+    const document: PolicyVersionV2Document = {
+      _id: new ObjectId(),
+      organizationId: input.organizationId,
+      tenantId: input.tenantId,
+      version,
+      schemaVersion: POLICY_SCHEMA_V2,
+      toolRegistryVersion: TOOL_REGISTRY_V2,
+      structuredPolicy: policy,
+      compilationStatus: compilation.ok ? 'compiled' : 'failed',
+      compilationIssues: compilation.issues,
+      reviewWarnings,
+      aiWritten: true,
+      approvalStatus: !compilation.ok
+        ? 'not_applicable'
+        : approve
+          ? 'approved'
+          : 'pending',
+      ...(approve ? { approvalSource: 'auto_apply' as const } : {}),
+      origin: {
+        kind: 'analysis',
+        analysisId: input.analysisId.toHexString(),
+        aiModel: input.aiModel,
+      },
+      createdBy: 'system:analysis',
+      createdAt: now,
+      lifecycleUpdatedAt: now,
+    };
+    await this.versions.insertOne(document, { session });
+    await this.audit.append(
+      {
+        organizationId: input.organizationId,
+        tenantId: input.tenantId,
+        actorSubject: 'system:analysis',
+        action: 'policy-version.proposed',
+        targetType: 'policyVersion',
+        targetId: version,
+        metadata: {
+          analysisId: input.analysisId.toHexString(),
+          compilationStatus: document.compilationStatus,
+        },
+      },
+      session,
+    );
+    await this.outbox.append(
+      'PolicyProposed',
+      input.organizationId,
+      input.tenantId,
+      version,
+      { version, analysisId: input.analysisId.toHexString() },
+      session,
+    );
+    await this.outbox.append(
+      compilation.ok ? 'PolicyCompiled' : 'PolicyCompilationFailed',
+      input.organizationId,
+      input.tenantId,
+      version,
+      compilation.ok ? { version } : { version, errorCode: 'INVALID_POLICY' },
+      session,
+    );
+    if (approve) {
+      await this.audit.append(
+        {
+          organizationId: input.organizationId,
+          tenantId: input.tenantId,
+          actorSubject: input.autoApplyBy!,
+          action: 'policy-version.approved',
+          targetType: 'policyVersion',
+          targetId: version,
+          metadata: { approvalSource: 'auto_apply' },
+        },
+        session,
+      );
+      await this.outbox.append(
+        'PolicyApproved',
+        input.organizationId,
+        input.tenantId,
+        version,
+        { version },
+        session,
+      );
+      // TODO(ADR-0018): also activate once a bundle schema carries policy v2.
+    }
+    return { version, created: true, approved: approve, autoApplySkipped };
+  }
+
+  /**
+   * Saves a policy editor draft as a new pending version. A draft may change
+   * human-readable text, tools and JEV context; the endpoints and fields
+   * themselves come from the analysis and cannot be added or removed.
+   */
+  async saveDraft(
+    organizationId: string,
+    tenantId: string,
+    dto: SavePolicyDraftDto,
+    actorSubject: string,
+  ): Promise<PolicyVersionView> {
+    const organizationObjectId = objectId(organizationId);
+    const tenantObjectId = objectId(tenantId);
+    const parent = await this.versions.findOne({
+      organizationId: organizationObjectId,
+      tenantId: tenantObjectId,
+      version: dto.parentVersion,
+    });
+    if (!parent) throw new NotFoundException('Parent policy version not found');
+    if (parent.schemaVersion !== POLICY_SCHEMA_V2) {
+      throw new ConflictException(
+        'Only tessera.policy/v2 versions can be edited here',
+      );
+    }
+    const policy = this.normalizeV2(dto.structuredPolicy);
+    const shapeIssues = this.shapeChanges(parent.structuredPolicy, policy);
+    const secretPaths = this.secretPaths(policy);
+    const compilation = this.compiler.compileV2(policy);
+    const issues = [...shapeIssues, ...secretPaths, ...compilation.issues];
+    if (issues.length > 0) {
+      throw new UnprocessableEntityException({
+        message: 'The draft cannot be saved',
+        issues,
+      });
+    }
+    const version = this.versionHashV2(policy);
+    const parentByKey = new Map(
+      parent.structuredPolicy.endpoints.map((endpoint) => [
+        endpointKey(endpoint),
+        canonicalJson(endpoint as unknown as JsonValue),
+      ]),
+    );
+    const changedEndpoints = policy.endpoints
+      .filter(
+        (endpoint) =>
+          parentByKey.get(endpointKey(endpoint)) !==
+          canonicalJson(endpoint as unknown as JsonValue),
+      )
+      .map(endpointKey);
+    const textChanged = policy.endpoints.some((endpoint, index) => {
+      const before = parent.structuredPolicy.endpoints[index];
+      return (
+        endpoint.humanReadablePolicy !== before.humanReadablePolicy ||
+        endpoint.fields.some(
+          (field, fieldIndex) =>
+            field.humanReadablePolicy !==
+            before.fields[fieldIndex].humanReadablePolicy,
+        )
+      );
+    });
+
+    try {
+      return await this.mongo.transaction(async (session) => {
+        const existing = await this.versions.findOne(
+          {
+            organizationId: organizationObjectId,
+            tenantId: tenantObjectId,
+            version,
+          },
+          { session },
+        );
+        if (existing) return this.toView(existing, session);
+        const now = new Date();
+        const document: PolicyVersionV2Document = {
+          _id: new ObjectId(),
+          organizationId: organizationObjectId,
+          tenantId: tenantObjectId,
+          version,
+          schemaVersion: POLICY_SCHEMA_V2,
+          toolRegistryVersion: TOOL_REGISTRY_V2,
+          structuredPolicy: policy,
+          compilationStatus: 'compiled',
+          compilationIssues: [],
+          reviewWarnings: [
+            ...parent.reviewWarnings.filter(
+              (warning) => warning.kind === 'analysis',
+            ),
+            ...this.jevContextWarnings(policy),
+          ],
+          aiWritten: parent.aiWritten || textChanged,
+          approvalStatus: 'pending',
+          origin: {
+            kind: 'draft',
+            parentVersion: parent.version,
+            analysisId: parent.origin.analysisId,
+            changedEndpoints,
+          },
+          createdBy: actorSubject,
+          createdAt: now,
+          lifecycleUpdatedAt: now,
+        };
+        await this.versions.insertOne(document, { session });
+        await this.audit.append(
+          {
+            organizationId: organizationObjectId,
+            tenantId: tenantObjectId,
+            actorSubject,
+            action: 'policy-version.drafted',
+            targetType: 'policyVersion',
+            targetId: version,
+            metadata: {
+              parentVersion: parent.version,
+              changedEndpoints: String(changedEndpoints.length),
+            },
+          },
+          session,
+        );
+        await this.outbox.append(
+          'PolicyDrafted',
+          organizationObjectId,
+          tenantObjectId,
+          version,
+          { version, parentVersion: parent.version },
+          session,
+        );
+        await this.outbox.append(
+          'PolicyCompiled',
+          organizationObjectId,
+          tenantObjectId,
+          version,
+          { version },
+          session,
+        );
+        return this.toView(document, session);
+      });
+    } catch (error) {
+      if (isDuplicateKey(error)) {
+        return this.get(organizationId, tenantId, version);
+      }
+      throw error;
+    }
+  }
+
+  /** Paths of free text in an endpoint that look like a credential. */
+  endpointSecretPaths(
+    endpoint: EndpointPolicyV2,
+    prefix = 'endpoint',
+  ): string[] {
+    const paths: string[] = [];
+    const check = (text: string | null, path: string) => {
+      if (text && detectSecrets(text).length > 0)
+        paths.push(`${path}: credential`);
+    };
+    check(endpoint.humanReadablePolicy, `${prefix}.humanReadablePolicy`);
+    check(endpoint.jevContext, `${prefix}.jevContext`);
+    endpoint.fields.forEach((field, index) => {
+      check(
+        field.humanReadablePolicy,
+        `${prefix}.fields.${index}.humanReadablePolicy`,
+      );
+      check(field.jevContext, `${prefix}.fields.${index}.jevContext`);
+    });
+    return paths;
   }
 
   async list(
@@ -383,10 +723,17 @@ export class PoliciesService implements OnModuleInit {
           approvalStatus: 'approved' | 'rejected';
           lifecycleUpdatedAt: Date;
           rejectionReason?: string;
+          approvalSource?: 'manual';
         } = {
           approvalStatus: desiredStatus,
           lifecycleUpdatedAt: now,
         };
+        if (
+          decision === 'approve' &&
+          document.schemaVersion === POLICY_SCHEMA_V2
+        ) {
+          lifecycleChanges.approvalSource = 'manual';
+        }
         if (decision === 'reject') {
           lifecycleChanges.rejectionReason = reason!.trim();
         }
@@ -453,6 +800,14 @@ export class PoliciesService implements OnModuleInit {
           throw new ConflictException(
             'Only approved, compiled policies can be activated',
           );
+        }
+        if (document.schemaVersion === POLICY_SCHEMA_V2) {
+          // ADR-0014: a later bundle schema must carry policy v2 first.
+          throw new ConflictException({
+            message:
+              'BUNDLE_SCHEMA_UNAVAILABLE: tessera.policy/v2 cannot be activated until proxies accept a bundle schema that carries it',
+            errorCode: 'BUNDLE_SCHEMA_UNAVAILABLE',
+          });
         }
         // Re-activating the selected policy rebuilds its bundle, which is how
         // edited runtime configuration reaches proxies.
@@ -614,7 +969,16 @@ export class PoliciesService implements OnModuleInit {
     document: PolicyVersionDocument,
     isActive: boolean,
   ): PolicyVersionView {
-    const state = isActive
+    return document.schemaVersion === POLICY_SCHEMA_V2
+      ? this.mapViewV2(document, isActive)
+      : this.mapViewV1(document, isActive);
+  }
+
+  private lifecycleState(
+    document: PolicyVersionDocument,
+    isActive: boolean,
+  ): PolicyVersionView['state'] {
+    return isActive
       ? 'ACTIVE'
       : document.compilationStatus === 'failed'
         ? 'COMPILATION_FAILED'
@@ -623,6 +987,43 @@ export class PoliciesService implements OnModuleInit {
           : document.approvalStatus === 'rejected'
             ? 'REJECTED'
             : 'PENDING_APPROVAL';
+  }
+
+  private mapViewV2(
+    document: PolicyVersionV2Document,
+    isActive: boolean,
+  ): PolicyVersionV2View {
+    return {
+      id: document._id.toHexString(),
+      organizationId: document.organizationId.toHexString(),
+      tenantId: document.tenantId.toHexString(),
+      version: document.version,
+      schemaVersion: document.schemaVersion,
+      toolRegistryVersion: document.toolRegistryVersion,
+      structuredPolicy: document.structuredPolicy,
+      compilationStatus: document.compilationStatus,
+      compilationIssues: document.compilationIssues,
+      reviewWarnings: document.reviewWarnings,
+      approvalStatus: document.approvalStatus,
+      approvalSource: document.approvalSource ?? null,
+      rejectionReason: document.rejectionReason ?? null,
+      state: this.lifecycleState(document, isActive),
+      origin: document.origin,
+      precisionWarning: document.aiWritten
+        ? NATURAL_LANGUAGE_PRECISION_WARNING
+        : null,
+      activatable: false,
+      createdBy: document.createdBy,
+      createdAt: document.createdAt,
+      lifecycleUpdatedAt: document.lifecycleUpdatedAt,
+    };
+  }
+
+  private mapViewV1(
+    document: PolicyVersionV1Document,
+    isActive: boolean,
+  ): PolicyVersionView {
+    const state = this.lifecycleState(document, isActive);
     const origin = document.origin ?? { kind: 'import' };
     return {
       id: document._id.toHexString(),
@@ -658,6 +1059,111 @@ export class PoliciesService implements OnModuleInit {
       humanReadableIntent,
       structuredPolicy,
     } as unknown as JsonValue);
+  }
+
+  private versionHashV2(policy: StructuredPolicyV2): string {
+    return this.contentHash({
+      schemaVersion: policy.schemaVersion,
+      toolRegistryVersion: policy.toolRegistryVersion,
+      structuredPolicy: policy,
+    } as unknown as JsonValue);
+  }
+
+  /** Copies only contract properties and trims free text. */
+  private normalizeV2(policy: StructuredPolicyV2): StructuredPolicyV2 {
+    const text = (value: string | null) => {
+      const trimmed = value?.trim() ?? '';
+      return trimmed === '' ? null : trimmed;
+    };
+    return {
+      schemaVersion: policy.schemaVersion,
+      toolRegistryVersion: policy.toolRegistryVersion,
+      endpoints: policy.endpoints.map((endpoint) => ({
+        method: endpoint.method,
+        path: endpoint.path,
+        humanReadablePolicy: endpoint.humanReadablePolicy.trim(),
+        requestTools: endpoint.requestTools.map((tool) => ({
+          toolId: tool.toolId,
+        })),
+        jevContext: text(endpoint.jevContext),
+        fields: endpoint.fields.map((field) => ({
+          name: field.name,
+          location: field.location,
+          type: field.type,
+          required: field.required,
+          humanReadablePolicy: field.humanReadablePolicy.trim(),
+          tools: field.tools.map((tool) => ({ toolId: tool.toolId })),
+          jevContext: text(field.jevContext),
+        })),
+      })),
+    };
+  }
+
+  /** A draft keeps its parent's endpoints and fields, in the same order. */
+  private shapeChanges(
+    parent: StructuredPolicyV2,
+    draft: StructuredPolicyV2,
+  ): string[] {
+    if (parent.endpoints.length !== draft.endpoints.length) {
+      return ['endpoints: added or removed'];
+    }
+    return draft.endpoints.flatMap((endpoint, index) => {
+      const before = parent.endpoints[index];
+      if (endpointKey(endpoint) !== endpointKey(before)) {
+        return [`endpoints.${index}: changed endpoint`];
+      }
+      if (endpoint.fields.length !== before.fields.length) {
+        return [`endpoints.${index}.fields: added or removed`];
+      }
+      return endpoint.fields.flatMap((field, fieldIndex) => {
+        const old = before.fields[fieldIndex];
+        return field.name !== old.name ||
+          field.location !== old.location ||
+          field.type !== old.type ||
+          field.required !== old.required
+          ? [`endpoints.${index}.fields.${fieldIndex}: changed field`]
+          : [];
+      });
+    });
+  }
+
+  private secretPaths(policy: StructuredPolicyV2): string[] {
+    return policy.endpoints.flatMap((endpoint, index) =>
+      this.endpointSecretPaths(endpoint, `endpoints.${index}`),
+    );
+  }
+
+  private containsSecret(policy: StructuredPolicyV2): boolean {
+    return this.secretPaths(policy).length > 0;
+  }
+
+  private jevContextWarnings(policy: StructuredPolicyV2): ReviewWarning[] {
+    const message =
+      'JEV context reads like an instruction or verdict; review it before approval.';
+    return policy.endpoints.flatMap((endpoint) => [
+      ...(endpoint.jevContext &&
+      jevContextReadsAsInstruction(endpoint.jevContext)
+        ? [
+            {
+              kind: 'jev_context' as const,
+              endpoint: endpointKey(endpoint),
+              field: null,
+              message,
+            },
+          ]
+        : []),
+      ...endpoint.fields
+        .filter(
+          (field) =>
+            field.jevContext && jevContextReadsAsInstruction(field.jevContext),
+        )
+        .map((field) => ({
+          kind: 'jev_context' as const,
+          endpoint: endpointKey(endpoint),
+          field: `${field.location}:${field.name}`,
+          message,
+        })),
+    ]);
   }
 
   private contentHash(value: JsonValue): string {

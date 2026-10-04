@@ -29,10 +29,10 @@ Client traffic -> Proxy -> protected application
 The proxy and collector initiate outbound HTTPS requests. The control plane
 never connects into a customer's network. Its only outbound call for source
 is to GitHub, through a GitHub App installation that the customer linked.
-Analyses call the organization's AI model: the Anthropic API, or a `local`
-model at an address the organization chose. That address must be public
-unless a self-hosted control plane allows private ones (ADR-0017). A control-plane outage must not
-interrupt a proxy that already has a verified bundle.
+Analyses call the AI model that the deployment configures in its environment:
+the Anthropic API, or a self-hosted model at an address the operator chose
+(ADR-0019). A control-plane outage must not interrupt a proxy that already has
+a verified bundle.
 
 ## Trust boundaries and API surfaces
 
@@ -114,10 +114,10 @@ keep the previous key when a fetch fails (ADR-0009).
   derived analysis (ADR-0013).
 - Signing keys, the GitHub App private key and provider credentials come from
   deployment secrets or a secret manager, never the database or frontend.
-- Customer integration credentials (the organization JEV key and AI model
-  key) are the one exception: MongoDB stores them encrypted under
-  `CREDENTIAL_ENCRYPTION_KEY`, and they are write-only for the dashboard
-  (ADR-0009, ADR-0010).
+- The AI model key is a deployment secret (ADR-0019). The organization JEV key
+  is the one customer credential in the database: MongoDB stores it encrypted
+  under `CREDENTIAL_ENCRYPTION_KEY`, and it is write-only for the dashboard
+  (ADR-0009).
 - Telemetry is best-effort and redacted. It must not affect bundle distribution
   or runtime decisions.
 

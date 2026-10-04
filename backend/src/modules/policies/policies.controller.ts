@@ -18,7 +18,11 @@ import type { DashboardPrincipal } from '../auth/dashboard-principal.js';
 import { OrganizationRoleGuard } from '../organizations/organization-role.guard.js';
 import { RequireOrganizationRoles } from '../organizations/organization-roles.decorator.js';
 import { TenantParamsDto } from '../projects/project.dto.js';
-import { ImportPolicyDto, PolicyVersionParamsDto } from './policy.dto.js';
+import {
+  ImportPolicyDto,
+  PolicyVersionParamsDto,
+  SavePolicyDraftDto,
+} from './policy.dto.js';
 import type { PolicyVersionView } from './policy.types.js';
 import { PoliciesService } from './policies.service.js';
 
@@ -37,6 +41,22 @@ export class PoliciesController {
     @CurrentPrincipal() principal: DashboardPrincipal,
   ): Promise<PolicyVersionView> {
     return this.policies.import(
+      params.organizationId,
+      params.tenantId,
+      dto,
+      principal.subject,
+    );
+  }
+
+  /** Saves a policy editor draft as a new pending `tessera.policy/v2` version. */
+  @Post('v2')
+  @RequireOrganizationRoles('owner', 'admin')
+  saveDraft(
+    @Param() params: TenantParamsDto,
+    @Body() dto: SavePolicyDraftDto,
+    @CurrentPrincipal() principal: DashboardPrincipal,
+  ): Promise<PolicyVersionView> {
+    return this.policies.saveDraft(
       params.organizationId,
       params.tenantId,
       dto,

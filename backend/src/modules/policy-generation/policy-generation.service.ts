@@ -22,7 +22,9 @@ import { AuditService } from '../audit/audit.service.js';
 import { OutboxService } from '../events/outbox.service.js';
 import { PoliciesService } from '../policies/policies.service.js';
 import { ProjectsService } from '../projects/projects.service.js';
+import { CompileHumanReadablePolicyDto } from '../policies/policy.dto.js';
 import {
+  CompiledEndpointView,
   PolicyGenerationDocument,
   PolicyGenerationKind,
   PolicyGenerationView,
@@ -125,6 +127,63 @@ export class PolicyGenerationService implements OnModuleInit {
         };
       },
     );
+  }
+
+  /**
+   * Compiles the edited human-readable policy of one endpoint, or of one of
+   * its fields, into the endpoint's tools and JEV context (ADR-0014). The
+   * result is a preview for the editor's draft and creates nothing.
+   */
+  async compileHumanReadablePolicy(
+    organizationId: string,
+    tenantId: string,
+    dto: CompileHumanReadablePolicyDto,
+  ): Promise<CompiledEndpointView> {
+    const parent = await this.policies.get(
+      organizationId,
+      tenantId,
+      dto.parentVersion,
+    );
+    if (parent.schemaVersion !== 'tessera.policy/v2') {
+      throw new ConflictException('Only tessera.policy/v2 endpoints compile');
+    }
+    const endpoint = dto.endpoint;
+    const known = parent.structuredPolicy.endpoints.some(
+      (candidate) =>
+        candidate.method === endpoint.method &&
+        candidate.path === endpoint.path,
+    );
+    if (!known) throw new NotFoundException('Endpoint not in this policy');
+    if (
+      dto.target.kind === 'field' &&
+      !endpoint.fields.some(
+        (field) =>
+          field.location === dto.target.location &&
+          field.name === dto.target.name,
+      )
+    ) {
+      throw new NotFoundException('Field not in this endpoint');
+    }
+    const secrets = this.policies.endpointSecretPaths(endpoint);
+    if (secrets.length > 0) {
+      throw new UnprocessableEntityException({
+        message: 'The text contains something that looks like a credential',
+        issues: secrets,
+      });
+    }
+
+    // TODO(M7): run an `endpoint_edit` policy generation attempt through the
+    // PolicyGenerationProvider, grounded in the analysis facts of
+    // `parent.origin.analysisId`, and validate its output with
+    // `PolicyCompilerService.compileV2` before returning it. Until then the
+    // tools and JEV context are returned unchanged with the edited text.
+    return {
+      endpoint,
+      limitations: [
+        'The plain-language compiler is not available yet, so the checks were not regenerated from your text. Adjust the checks yourself so they match it.',
+      ],
+      mock: true,
+    };
   }
 
   async list(

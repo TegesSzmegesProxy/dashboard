@@ -28,6 +28,7 @@ import {
   ApproveBudgetDto,
 } from './analysis.dto.js';
 import type {
+  AnalysisReadinessView,
   AnalysisSummaryView,
   AnalysisView,
   WorkItemView,
@@ -79,6 +80,31 @@ export class AnalysesController {
     );
   }
 
+  /** What this deployment provides for analyses (model, sandbox). */
+  @Get('analysis-readiness')
+  @RequireOrganizationRoles('owner', 'admin', 'viewer')
+  readiness(@Param() params: TenantParamsDto): Promise<AnalysisReadinessView> {
+    return this.analyses.readiness(params.organizationId, params.tenantId);
+  }
+
+  /** Starts an analysis of the bound repository's head, without a collector. */
+  @Post('analyses')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @RequireOrganizationRoles('owner', 'admin')
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  start(
+    @Param() params: TenantParamsDto,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @CurrentPrincipal() principal: DashboardPrincipal,
+  ): Promise<AnalysisSummaryView> {
+    return this.analyses.startFromRepository(
+      params.organizationId,
+      params.tenantId,
+      idempotencyKey,
+      principal.subject,
+    );
+  }
+
   /** Approves the spending ceiling after reviewing the estimate (ADR-0015). */
   @Post('analyses/:analysisId/budget-approval')
   @HttpCode(HttpStatus.ACCEPTED)
@@ -95,6 +121,7 @@ export class AnalysesController {
       params.tenantId,
       params.analysisId,
       dto.ceilingUsd,
+      dto.policyReviewMode ?? 'review',
       idempotencyKey,
       principal.subject,
     );
@@ -133,6 +160,7 @@ export class AnalysesController {
       params.organizationId,
       params.tenantId,
       dto.autoApproveCeilingUsd,
+      dto.defaultPolicyReviewMode,
       principal.subject,
     );
   }

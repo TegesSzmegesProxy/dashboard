@@ -4,6 +4,7 @@ import type {
   EvidenceDto,
 } from '../../contracts/analysis/v2/analysis-agent.contract.js';
 import {
+  jevContextReadsAsInstruction,
   POLICY_SCHEMA_V2,
   StructuredPolicyV2,
 } from '../../contracts/policy/v2/policy.contract.js';
@@ -18,13 +19,6 @@ import type {
   Evidence,
   ToolChoice,
 } from './analysis.types.js';
-
-/**
- * Phrases that read as instructions or verdicts aimed at the classifier
- * rather than as a description of legitimate input (ADR-0014).
- */
-const JEV_CONTEXT_LINT =
-  /\b(?:ignore|disregard|override|always|never)\b[^.]{0,40}\b(?:allow|block|classif|treat|flag|instruction|rule)|\b(?:classify|treat|mark|consider)\b[^.]{0,30}\b(?:as )?(?:safe|benign|harmless|trusted|attack)|\bnot an attack\b|\bsystem prompt\b/i;
 
 const CONFIDENCE_RANK = { high: 0, medium: 1, low: 2 } as const;
 
@@ -90,7 +84,7 @@ export function toEndpointRecord(
   const lint = (value: string | null, where: string): string | null => {
     if (value === null) return null;
     const redacted = clean(value);
-    if (JEV_CONTEXT_LINT.test(redacted)) {
+    if (jevContextReadsAsInstruction(redacted)) {
       warnings.push(
         `JEV context of ${where} reads like an instruction or verdict; review it before approval.`,
       );
@@ -116,6 +110,7 @@ export function toEndpointRecord(
         field.location === 'file' ? 'file' : 'field',
         `field ${field.name}`,
       ),
+      humanReadablePolicy: clean(field.humanReadablePolicy),
       jevContext: lint(field.jevContext, `field ${field.name}`),
     });
   }
@@ -241,6 +236,8 @@ export function buildPolicyProposal(
         location: field.location,
         type: field.type,
         required: field.required,
+        // Analyses from before field-level policies have no text.
+        humanReadablePolicy: field.humanReadablePolicy ?? '',
         tools: field.tools.map((tool) => ({ toolId: tool.toolId })),
         jevContext: field.jevContext,
       })),

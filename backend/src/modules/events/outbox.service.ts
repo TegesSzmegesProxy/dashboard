@@ -4,6 +4,8 @@ import { MongoDatabase } from '../../infrastructure/database/mongo-database.serv
 
 export type OutboxEventType =
   | 'PolicyImported'
+  | 'PolicyProposed'
+  | 'PolicyDrafted'
   | 'PolicyCompiled'
   | 'PolicyCompilationFailed'
   | 'PolicyApproved'

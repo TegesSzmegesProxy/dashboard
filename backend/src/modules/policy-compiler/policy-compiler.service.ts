@@ -1,9 +1,17 @@
 import { Injectable } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validateSync, ValidationError } from 'class-validator';
 import {
   HTTP_METHODS,
   POLICY_SCHEMA_VERSION,
   TOOL_REGISTRY_VERSION,
 } from '../../contracts/policy/v1/policy.contract.js';
+import {
+  MAX_ENDPOINTS_V2,
+  StructuredPolicyV2,
+  StructuredPolicyV2Dto,
+  toolPlacementIssues,
+} from '../../contracts/policy/v2/policy.contract.js';
 import {
   CompilationResult,
   CompiledEndpointPolicy,
@@ -139,7 +147,47 @@ export class PolicyCompilerService {
     };
   }
 
+  /**
+   * Checks a `tessera.policy/v2` policy against its contract and the
+   * placement rules of `tessera.tools/v2`. Tools carry no configuration, so
+   * the compiled form is the structured policy itself; only issues are
+   * returned, as contract paths without values.
+   */
+  compileV2(policy: StructuredPolicyV2): { ok: boolean; issues: string[] } {
+    const issues = flattenValidation(
+      validateSync(plainToInstance(StructuredPolicyV2Dto, policy), {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
+    if (issues.length > 0) return { ok: false, issues };
+    if (
+      policy.endpoints.length === 0 ||
+      policy.endpoints.length > MAX_ENDPOINTS_V2
+    ) {
+      issues.push('endpoints: count');
+    }
+    const seen = new Set<string>();
+    policy.endpoints.forEach((endpoint, index) => {
+      const key = `${endpoint.method} ${endpoint.path}`;
+      if (seen.has(key)) issues.push(`endpoints.${index}: duplicate`);
+      seen.add(key);
+      issues.push(...toolPlacementIssues(endpoint, `endpoints.${index}`));
+    });
+    return { ok: issues.length === 0, issues };
+  }
+
   private invalidConfig(message: string): CompilationResult {
     return { ok: false, error: { code: 'INVALID_TOOL_CONFIG', message } };
   }
+}
+
+function flattenValidation(errors: ValidationError[], prefix = ''): string[] {
+  return errors.flatMap((error) => {
+    const path = prefix ? `${prefix}.${error.property}` : error.property;
+    const own = Object.keys(error.constraints ?? {}).map(
+      (rule) => `${path}: ${rule}`,
+    );
+    return [...own, ...flattenValidation(error.children ?? [], path)];
+  });
 }

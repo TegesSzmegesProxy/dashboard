@@ -15,6 +15,7 @@ import type {
   StructuredPolicyV2,
 } from '../../contracts/policy/v2/policy.contract.js';
 import type { ToolId } from '../../contracts/tools/v2/tool-registry.js';
+import type { AnalysisAiStatus } from '../../infrastructure/ai/analysis-ai.service.js';
 import type { TokenUsage } from '../../infrastructure/ai/pricing.js';
 import type {
   CandidateLocation,
@@ -73,6 +74,25 @@ export interface AnalysisEstimate {
   suggestedCeilingUsd: number;
   assumptions: string[];
   aiCredentialConfigured: boolean;
+}
+
+/**
+ * Chosen before generation: review the proposed policy, or apply it through a
+ * standing approval when nothing needs review (ADR-0018).
+ */
+export type PolicyReviewMode = 'review' | 'auto_apply';
+
+export interface PolicyReviewChoice {
+  mode: PolicyReviewMode;
+  chosenBy: string;
+  chosenAt: Date;
+}
+
+/** The pending policy version committed with the analysis. */
+export interface AnalysisPolicyOutcome {
+  version: string;
+  approved: boolean;
+  autoApplySkipped: string | null;
 }
 
 export interface AnalysisBudget {
@@ -138,6 +158,8 @@ export interface EndpointField {
   constraints: string[];
   evidence: Evidence[];
   tools: ToolChoice[];
+  /** Absent on analyses from before field-level policies. */
+  humanReadablePolicy?: string;
   jevContext: string | null;
 }
 
@@ -202,7 +224,12 @@ export interface AnalysisDocument {
   _id: ObjectId;
   organizationId: ObjectId;
   tenantId: ObjectId;
-  uploadId: ObjectId;
+  /** Null for an analysis started from the dashboard (`startedBy` is set). */
+  uploadId: ObjectId | null;
+  /** Subject who started the analysis from the dashboard. */
+  startedBy?: string;
+  /** Hash of the start request's Idempotency-Key; dashboard starts only. */
+  startKeyHash?: string;
   commitSha: string;
   schemaVersion: typeof ANALYSIS_SCHEMA_V2;
   status: AnalysisStatus;
@@ -228,6 +255,9 @@ export interface AnalysisDocument {
   readManifest: AiReadManifest | null;
   results: AnalysisResults | null;
   version: string | null;
+  /** Absent on analyses from before policy review modes. */
+  policyReview?: PolicyReviewChoice | null;
+  policy?: AnalysisPolicyOutcome | null;
   errorCode: string | null;
   createdAt: Date;
   startedAt: Date | null;
@@ -268,6 +298,8 @@ export interface AnalysisSettingsDocument {
   tenantId: ObjectId;
   /** Explicit; analyses wait for approval when null (ADR-0015). */
   autoApproveCeilingUsd: number | null;
+  /** Review mode of analyses whose budget is approved automatically. */
+  defaultPolicyReviewMode?: PolicyReviewMode;
   updatedBy: string;
   updatedAt: Date;
 }
@@ -276,7 +308,9 @@ export interface AnalysisSummaryView {
   id: string;
   organizationId: string;
   tenantId: string;
-  uploadId: string;
+  /** Null when started from the dashboard rather than by a collector. */
+  uploadId: string | null;
+  startedBy: string | null;
   commitSha: string;
   status: AnalysisStatus;
   phase: AnalysisPhase;
@@ -287,10 +321,26 @@ export interface AnalysisSummaryView {
   usage: AnalysisUsage;
   environment: AnalysisEnvironmentInfo | null;
   steps: AnalysisStep[];
+  policyReview: PolicyReviewChoice | null;
+  policy: AnalysisPolicyOutcome | null;
   errorCode: string | null;
   createdAt: Date;
   startedAt: Date | null;
   finishedAt: Date | null;
+}
+
+/** What a dashboard-started analysis needs from this deployment. */
+export interface AnalysisReadinessView {
+  ai: AnalysisAiStatus;
+  /** False when `ANALYSIS_SANDBOX` is unset, so source cannot be fetched. */
+  sandboxConfigured: boolean;
+  /** An analysis of this project that has not finished; only one runs at a time. */
+  activeAnalysis: { id: string; status: AnalysisStatus } | null;
+}
+
+export interface AnalysisSettingsView {
+  autoApproveCeilingUsd: number | null;
+  defaultPolicyReviewMode: PolicyReviewMode;
 }
 
 export interface AnalysisView extends AnalysisSummaryView {

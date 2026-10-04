@@ -33,6 +33,8 @@ jevContext (endpoint and field): a short, factual description of what the endpoi
 
 humanReadablePolicy: plain language for the administrator who approves the policy. State exactly what the selected tools check, then what they cannot express yet.
 
+Field humanReadablePolicy: one or two sentences for each field, stating what that field's tools check and what they cannot check yet. Empty when the field has no tools.
+
 Evidence: cite file paths exactly as the tools return them, with 1-based line ranges you have actually read. Use basis "observed" only for what the code shows; "inferred" for reasoning beyond it.
 
 Use record_note for facts you will need later; old tool results may be cleared from your context.

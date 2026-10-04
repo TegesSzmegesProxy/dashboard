@@ -1,35 +1,53 @@
 import { useState } from 'react';
-import { useApi, usePaged, type PolicyVersion, type StructuredPolicy } from '../api';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { useApi, usePaged, type PolicyVersion, type PolicyVersionV1, type StructuredPolicy } from '../api';
 import { Button, Dialog, Input } from '../components';
 import { useOrg } from '../Layout';
 import { EditPolicyDialog, Generations } from './ProjectGenerations';
+import { GeneratePolicyCard } from './GeneratePolicy';
+import { PolicyEditor } from './policy-editor/PolicyEditor';
 import { LoadMore, Loading, newIdempotencyKey, Note, PolicyBadge, Section, useAction, when } from '../ui';
 
 export function ProjectPolicies({ path }: { path: string }) {
   const { canEdit } = useOrg();
+  const { tenantId = '' } = useParams();
   const policies = usePaged<PolicyVersion>(`${path}/policies`);
-  const [selected, setSelected] = useState<string | null>(null);
+  // The selected version and endpoint live in the URL so links point at one place.
+  const [params, setParams] = useSearchParams();
+  const selected = params.get('version');
+  const setParam = (key: string, value: string | null) => setParams((prev) => {
+    const next = new URLSearchParams(prev);
+    if (value === null) next.delete(key); else next.set(key, value);
+    if (key === 'version') next.delete('endpoint');
+    return next;
+  }, { replace: true });
   const [importing, setImporting] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [genKey, setGenKey] = useState(0);
-  const current = policies.items.find((p) => p.version === selected) ?? policies.items[0];
+  // Newest first: a fresh analysis or saved draft is what the user wants to see.
+  const newest = [...policies.items].reverse();
+  const current = policies.items.find((p) => p.version === selected) ?? newest[0];
+  const hasV1 = policies.items.some((p) => p.schemaVersion === 'tessera.policy/v1');
 
   return (
     <div className="stack" style={{ gap: 'var(--space-5)' }}>
-    <div className="grid-main" style={{ gridTemplateColumns: '1fr 1.6fr' }}>
-      <Section title="Versions" desc="Each version is immutable. Editing means importing a new one."
-        aside={canEdit ? <Button size="sm" iconLeft="plus" onClick={() => setImporting(true)}>Import</Button> : undefined}>
+      <GeneratePolicyCard path={path} tenantId={tenantId} />
+      <Section title="Versions" desc="Each version is immutable. Editing a policy saves a new version that needs approval; the active one keeps running until then."
+        aside={canEdit ? <Button size="sm" variant="ghost" iconLeft="plus" onClick={() => setImporting(true)}>Import v1</Button> : undefined}>
         {policies.error && <Note tone="error">{policies.error}</Note>}
         {policies.loading && !policies.items.length ? <Loading what="policies" /> : policies.items.length === 0 ? (
-          <p className="muted small">No policy versions yet.</p>
+          <p className="muted small">No policy versions yet. A completed analysis proposes one.</p>
         ) : (
-          <ul className="list">
-            {policies.items.map((p) => (
-              <li key={p.id} className="link" onClick={() => setSelected(p.version)}
+          <ul className="list" style={{ maxHeight: 220, overflowY: 'auto' }}>
+            {newest.map((p) => (
+              <li key={p.id} className="link" tabIndex={0} onClick={() => setParam('version', p.version)}
+                onKeyDown={(ev) => ev.key === 'Enter' && setParam('version', p.version)}
                 style={p.version === current?.version ? { background: 'var(--surface-sunken)' } : undefined}>
                 <span>
-                  <span className="mono title">{p.version}</span>
-                  <span className="faint small" style={{ display: 'block' }}>{p.structuredPolicy.endpoints.length} endpoints · {when(p.createdAt)}</span>
+                  <span className="mono title">{p.version.slice(0, 12)}…</span>
+                  <span className="faint small" style={{ display: 'block' }}>
+                    {p.structuredPolicy.endpoints.length} endpoints · {versionOrigin(p)} · {when(p.createdAt)}
+                  </span>
                 </span>
                 <PolicyBadge state={p.state} />
               </li>
@@ -39,16 +57,27 @@ export function ProjectPolicies({ path }: { path: string }) {
         <LoadMore hasMore={policies.hasMore} loadMore={policies.loadMore} />
       </Section>
 
-      {current ? <PolicyDetail key={current.id} p={current} path={path} reload={policies.reload} onEdit={() => setEditing(current.version)} /> : <span />}
-      {importing && <ImportDialog path={path} onClose={() => setImporting(false)} onDone={(v) => { setImporting(false); setSelected(v); policies.reload(); }} />}
+      {current?.schemaVersion === 'tessera.policy/v2' && (
+        <PolicyEditor key={current.id} p={current} path={path} tenantId={tenantId} reload={policies.reload}
+          onOpenVersion={(v) => { policies.reload(); setParam('version', v); }}
+          endpoint={params.get('endpoint')} onEndpoint={(k) => setParam('endpoint', k)} />
+      )}
+      {current?.schemaVersion === 'tessera.policy/v1' && (
+        <PolicyDetail key={current.id} p={current} path={path} reload={policies.reload} onEdit={() => setEditing(current.version)} />
+      )}
+      {importing && <ImportDialog path={path} onClose={() => setImporting(false)} onDone={(v) => { setImporting(false); setParam('version', v); policies.reload(); }} />}
       {editing && <EditPolicyDialog path={path} version={editing} onClose={() => setEditing(null)} onDone={() => { setEditing(null); setGenKey((k) => k + 1); }} />}
-    </div>
-    <Generations key={genKey} path={path} onOpenVersion={(v) => { setSelected(v); policies.reload(); }} />
+      {hasV1 && <Generations key={genKey} path={path} onOpenVersion={(v) => { setParam('version', v); policies.reload(); }} />}
     </div>
   );
 }
 
-function PolicyDetail({ p, path, reload, onEdit }: { p: PolicyVersion; path: string; reload: () => void; onEdit: () => void }) {
+function versionOrigin(p: PolicyVersion): string {
+  if (p.schemaVersion === 'tessera.policy/v1') return 'v1';
+  return p.origin.kind === 'analysis' ? 'from analysis' : `edited · ${p.origin.changedEndpoints.length} endpoints changed`;
+}
+
+function PolicyDetail({ p, path, reload, onEdit }: { p: PolicyVersionV1; path: string; reload: () => void; onEdit: () => void }) {
   const { canEdit } = useOrg();
   const api = useApi();
   const run = useAction();
@@ -164,7 +193,7 @@ function ImportDialog({ path, onClose, onDone }: { path: string; onClose: () => 
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
         <Button disabled={!parsed || !intent.trim() || run.pending}
           onClick={() => void run.go(async () => {
-            const v = await api<PolicyVersion>(`${path}/policies/import`, { method: 'POST', body: { humanReadableIntent: intent.trim(), structuredPolicy: parsed } });
+            const v = await api<PolicyVersionV1>(`${path}/policies/import`, { method: 'POST', body: { humanReadableIntent: intent.trim(), structuredPolicy: parsed } });
             onDone(v.version);
           }, 'Policy imported')}>Import</Button>
       </>}>

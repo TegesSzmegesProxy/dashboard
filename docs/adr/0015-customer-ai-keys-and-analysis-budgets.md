@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Accepted. The customer-provided AI key is superseded by ADR-0019; the
+estimate, budget and provider-error rules still apply.
 
 ## Context
 

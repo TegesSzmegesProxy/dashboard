@@ -7,9 +7,12 @@ import {
 import { randomUUID } from 'node:crypto';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
 import { OutboxService } from '../events/outbox.service.js';
+import { PoliciesService } from '../policies/policies.service.js';
+import type { ReviewWarning } from '../policies/policy.types.js';
+import { findTool } from '../../contracts/tools/v2/tool-registry.js';
 import { AnalysesService, LeaseLostError } from './analyses.service.js';
 import { AnalysisPipeline, PhaseOutcome } from './analysis-pipeline.service.js';
-import type { AnalysisDocument } from './analysis.types.js';
+import type { AnalysisDocument, EndpointRecord } from './analysis.types.js';
 
 const POLL_INTERVAL_MS = 5_000;
 const LEASE_MS = 15 * 60_000;
@@ -36,6 +39,7 @@ export class AnalysisWorker
     private readonly outbox: OutboxService,
     private readonly analyses: AnalysesService,
     private readonly pipeline: AnalysisPipeline,
+    private readonly policies: PoliciesService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -214,6 +218,39 @@ export class AnalysisWorker
             { session, returnDocument: 'after' },
           );
           if (!updated) return;
+          // The proposal and its analysis are committed together (Phase 8 M6).
+          const proposal = updated.results?.policyProposal;
+          if (outcome.status !== 'failed' && proposal?.endpoints.length) {
+            const review = updated.policyReview ?? null;
+            const policy = await this.policies.createV2FromAnalysis(
+              {
+                organizationId: job.organizationId,
+                tenantId: job.tenantId,
+                analysisId: job._id,
+                aiModel: updated.usage.models[0] ?? null,
+                structuredPolicy: proposal,
+                analysisWarnings: analysisReviewWarnings(
+                  updated.results!.endpoints,
+                ),
+                autoApplyBy:
+                  review?.mode === 'auto_apply' ? review.chosenBy : null,
+              },
+              session,
+            );
+            await this.analyses.analyses.updateOne(
+              { _id: job._id },
+              {
+                $set: {
+                  policy: {
+                    version: policy.version,
+                    approved: policy.approved,
+                    autoApplySkipped: policy.autoApplySkipped,
+                  },
+                },
+              },
+              { session },
+            );
+          }
           await this.outbox.append(
             outcome.status === 'failed'
               ? 'AnalysisFailed'
@@ -236,4 +273,39 @@ export class AnalysisWorker
         });
     }
   }
+}
+
+/**
+ * What a reviewer should check in a proposal: reconciliation warnings, low
+ * confidence and stateful tools chosen from purpose rather than code. JEV
+ * context lint is recomputed by the policy version itself.
+ */
+function analysisReviewWarnings(endpoints: EndpointRecord[]): ReviewWarning[] {
+  return endpoints.flatMap((record) => {
+    const endpoint = `${record.method} ${record.path}`;
+    const at = (message: string): ReviewWarning => ({
+      kind: 'analysis',
+      endpoint,
+      field: null,
+      message,
+    });
+    return [
+      ...record.warnings
+        .filter((warning) => !warning.startsWith('JEV context of'))
+        .map(at),
+      ...(record.confidence === 'low'
+        ? [at('The analysis has low confidence in this endpoint.')]
+        : []),
+      ...record.requestTools
+        .filter(
+          (tool) =>
+            tool.basis === 'inferred' && findTool(tool.toolId)?.stateful,
+        )
+        .map((tool) =>
+          at(
+            `${findTool(tool.toolId)?.label ?? tool.toolId} was chosen from the endpoint's purpose, not from code; confirm it.`,
+          ),
+        ),
+    ];
+  });
 }

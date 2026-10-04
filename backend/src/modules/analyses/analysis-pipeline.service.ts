@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { plainToInstance } from 'class-transformer';
@@ -14,6 +13,7 @@ import {
 } from '../../contracts/analysis/v2/analysis-agent.contract.js';
 import { Environment } from '../../config/environment.js';
 import { AiProviderError } from '../../infrastructure/ai/ai-provider-error.js';
+import { AnalysisAiService } from '../../infrastructure/ai/analysis-ai.service.js';
 import {
   AgentLimits,
   AgentRunResult,
@@ -39,9 +39,6 @@ import type {
   RepoIndexSummary,
   RouteCandidate,
 } from '../../repo-host/protocol.js';
-import { AiCredentialError } from '../integrations/ai-model-credential.errors.js';
-import { AiModelCredentialService } from '../integrations/ai-model-credential.service.js';
-import type { AnalysisModelCredential } from '../integrations/ai-model-credential.types.js';
 import {
   ENVIRONMENT_MISSING_NOTICE,
   EnvironmentSnapshotDocument,
@@ -180,7 +177,7 @@ export class AnalysisPipeline {
     private readonly github: GitHubAppClient,
     private readonly sandbox: RepoSandbox,
     private readonly snapshots: EnvironmentSnapshotsService,
-    private readonly credentials: AiModelCredentialService,
+    private readonly ai: AnalysisAiService,
     config: ConfigService<Environment, true>,
   ) {
     this.prices = new PriceTable(config.get('AI_PRICE_TABLE', { infer: true }));
@@ -406,9 +403,7 @@ export class AnalysisPipeline {
       'route_like_files',
       { limit: 2_000 },
     );
-    const aiCredentialConfigured = await this.credentials.hasAnalysisCredential(
-      job.organizationId,
-    );
+    const aiCredentialConfigured = this.ai.status.configured;
     const estimate = estimateAnalysis(
       {
         model: this.model,
@@ -454,6 +449,10 @@ export class AnalysisPipeline {
               approvedAt: new Date(),
               source: 'auto' as const,
             },
+            policyReview: await this.analyses.defaultPolicyReview(
+              job.organizationId,
+              job.tenantId,
+            ),
           }
         : {}),
     });
@@ -473,46 +472,21 @@ export class AnalysisPipeline {
     }
     const index = await this.indexRepository(context);
 
-    let credential: AnalysisModelCredential;
-    try {
-      credential = await this.credentials.resolveAnalysisCredential(
-        job.organizationId,
-      );
-    } catch (error) {
-      if (error instanceof AiCredentialError && error.retryable) {
-        throw new PhaseStop({ kind: 'retry', errorCode: error.code });
-      }
-      const code =
-        error instanceof AiCredentialError
-          ? error.code
-          : 'AI_CREDENTIAL_MISSING';
+    const client = this.ai.createClient();
+    if (!client) {
       recorder.record(
         'recon',
         'failed',
-        error instanceof AiCredentialError
-          ? error.message
-          : 'The organization has no usable AI provider key',
-        code,
+        'No AI model is configured for this control plane; set ANTHROPIC_API_KEY or ANALYSIS_AI_BASE_URL',
+        'AI_NOT_CONFIGURED',
       );
       await this.saveSteps(job, leaseOwner, recorder);
-      return { kind: 'finished', status: 'failed', errorCode: code };
+      return {
+        kind: 'finished',
+        status: 'failed',
+        errorCode: 'AI_NOT_CONFIGURED',
+      };
     }
-    const client = new Anthropic({
-      maxRetries: 2,
-      timeout: 15 * 60_000,
-      ...(credential.provider === 'local'
-        ? {
-            baseURL: credential.baseUrl,
-            // No key: explicit nulls keep the SDK from reading platform keys
-            // from the environment and sending them to the local endpoint.
-            apiKey: null,
-            authToken: null,
-            defaultHeaders: { 'x-api-key': null },
-            // A redirect would bypass the endpoint check (ADR-0017).
-            fetchOptions: { redirect: 'error' as const },
-          }
-        : { apiKey: credential.apiKey }),
-    });
 
     const snapshot = await this.snapshots.findLatest(
       job.organizationId,

@@ -1,28 +1,37 @@
 import { useEffect, useState } from 'react';
-import { useApi, usePaged, useResource, type Analysis, type AnalysisUpload, type AnalysisSummary } from '../api';
-import { Badge, Button, Dialog, Input } from '../components';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useApi, usePaged, useResource, type Analysis, type AnalysisUpload, type AnalysisSummary, type PolicyReviewMode } from '../api';
+import { Badge, Button, Dialog, Input, Radio } from '../components';
 import { useOrg } from '../Layout';
 import { AnalysisBadge, LoadMore, Loading, newIdempotencyKey, Note, Section, short, useAction, when } from '../ui';
 
 export function ProjectAnalyses({ path }: { path: string }) {
   const analyses = usePaged<AnalysisSummary>(`${path}/analyses`);
-  const [open, setOpen] = useState<string | null>(null);
+  // The open analysis lives in the URL so other screens can link straight to it.
+  const [params, setParams] = useSearchParams();
+  const open = params.get('analysis');
+  const setOpen = (id: string | null) => setParams((prev) => {
+    const next = new URLSearchParams(prev);
+    if (id) next.set('analysis', id); else next.delete('analysis');
+    return next;
+  }, { replace: true });
 
   return (
-    <Section title="Analyses" desc="A collector upload starts one analysis of the bound repository at that commit. It waits for a budget you approve before any AI cost is incurred. Results are immutable.">
+    <Section title="Analyses" desc="An analysis reads the bound repository at one commit, started by a collector upload or from the Policies tab. It waits for a budget you approve before any AI cost is incurred. Results are immutable.">
       {analyses.error && <Note tone="error">{analyses.error}</Note>}
       {analyses.loading && !analyses.items.length ? <Loading what="analyses" /> : analyses.items.length === 0 ? (
-        <p className="muted small">No analyses yet. Run the collector in CI with a collector key for this project.</p>
+        <p className="muted small">No analyses yet. Generate a policy from the Policies tab, or run the collector in CI with a collector key for this project.</p>
       ) : (
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>Commit</th><th>Repository</th><th>Status</th><th>Version</th><th>Started</th></tr></thead>
+            <thead><tr><th>Commit</th><th>Repository</th><th>Status</th><th>Source</th><th>Version</th><th>Started</th></tr></thead>
             <tbody>
               {analyses.items.map((a) => (
                 <tr key={a.id} className="link" onClick={() => setOpen(a.id)}>
                   <td className="mono">{short(a.commitSha)}</td>
                   <td className="mono">{a.repository?.fullName ?? '—'}</td>
                   <td><AnalysisBadge status={a.status} /></td>
+                  <td className="muted small">{a.uploadId ? 'Collector' : 'Dashboard'}</td>
                   <td className="mono muted">{a.version ?? '—'}</td>
                   <td className="mono muted">{when(a.createdAt)}</td>
                 </tr>
@@ -63,6 +72,7 @@ function BudgetApproval({ path, a, onDone }: { path: string; a: Analysis; onDone
   const [idem] = useState(newIdempotencyKey);
   const e = a.estimate;
   const [ceiling, setCeiling] = useState(e ? String(e.suggestedCeilingUsd) : '');
+  const [reviewMode, setReviewMode] = useState<PolicyReviewMode>('review');
   const value = Number(ceiling);
   const valid = Number.isFinite(value) && value > 0 && value <= 10000;
   if (!e) return null;
@@ -75,11 +85,18 @@ function BudgetApproval({ path, a, onDone }: { path: string; a: Analysis; onDone
       <ul className="faint small" style={{ margin: 0, paddingLeft: 'var(--space-5)' }}>
         {e.assumptions.map((t, i) => <li key={i}>{t}</li>)}
       </ul>
-      {!e.aiCredentialConfigured && <Note tone="error">Connect an Anthropic API key for this organization under Integrations before approving a budget.</Note>}
+      <fieldset className="stack" style={{ gap: 'var(--space-2)', border: 0, padding: 0, margin: 0 }}>
+        <legend className="eyebrow" style={{ marginBottom: 'var(--space-2)' }}>When the policy is generated</legend>
+        <Radio name="policy-review" value="review" checked={reviewMode === 'review'} onChange={() => setReviewMode('review')}
+          label={<span><strong>Let me review it</strong> <span className="muted small">— open it in the policy editor, adjust it, then approve it.</span></span>} />
+        <Radio name="policy-review" value="auto_apply" checked={reviewMode === 'auto_apply'} onChange={() => setReviewMode('auto_apply')}
+          label={<span><strong>Apply it automatically</strong> <span className="muted small">— approve it on your behalf if it compiles and nothing is flagged for review; otherwise it waits for you.</span></span>} />
+      </fieldset>
+      {!e.aiCredentialConfigured && <Note tone="error">No AI model is configured for this control plane. Set ANTHROPIC_API_KEY (or ANALYSIS_AI_BASE_URL) in its environment, then reload.</Note>}
       <div className="actions">
         <Input label="Spending ceiling (USD)" type="number" mono value={ceiling} onChange={(ev) => setCeiling(ev.target.value)} />
         <Button disabled={!valid || !e.aiCredentialConfigured || run.pending}
-          onClick={() => void run.go(() => api(`${path}/budget-approval`, { method: 'POST', idempotencyKey: idem, body: { ceilingUsd: value } }), 'Budget approved').then((ok) => ok && onDone())}>
+          onClick={() => void run.go(() => api(`${path}/budget-approval`, { method: 'POST', idempotencyKey: idem, body: { ceilingUsd: value, policyReviewMode: reviewMode } }), 'Budget approved').then((ok) => ok && onDone())}>
           Approve and start
         </Button>
       </div>
@@ -119,7 +136,9 @@ function AnalysisDialog({ path, projectPath, onClose }: { path: string; projectP
                 spent {usd(a.usage.usd)}{a.budget ? ` of ${usd(a.budget.ceilingUsd)}` : ''}
               </span>
             </div>
-            <UploadManifest projectPath={projectPath} uploadId={a.uploadId} />
+            {a.uploadId
+              ? <UploadManifest projectPath={projectPath} uploadId={a.uploadId} />
+              : <p className="mono small" style={{ margin: 0 }}>Started from the dashboard by {a.startedBy ?? 'unknown'} · head of the default branch at {short(a.commitSha)}</p>}
 
             {a.environment?.notice && <Note>{a.environment.notice}</Note>}
             {a.environment?.snapshotId && <p className="mono faint small" style={{ margin: 0 }}>environment snapshot {short(a.environment.snapshotId)} · {a.environment.ageHours} hours old</p>}
@@ -159,6 +178,8 @@ function AnalysisDialog({ path, projectPath, onClose }: { path: string; projectP
               </div>
             )}
 
+            {a.policy && <PolicyOutcome a={a} />}
+
             {a.results && (
               <>
                 <div>
@@ -194,5 +215,28 @@ function AnalysisDialog({ path, projectPath, onClose }: { path: string; projectP
         )}
       </div>
     </Dialog>
+  );
+}
+
+/** The policy version this analysis proposed, and what happened to it. */
+function PolicyOutcome({ a }: { a: Analysis }) {
+  const navigate = useNavigate();
+  const { base } = useOrg();
+  const { tenantId = '' } = useParams();
+  const policy = a.policy!;
+  return (
+    <div className="spread" style={{ alignItems: 'flex-start' }}>
+      <div className="stack" style={{ gap: 'var(--space-1)' }}>
+        <div className="eyebrow">Policy</div>
+        <span className="small">
+          Version <span className="mono">{policy.version.slice(0, 12)}…</span>{' '}
+          {policy.approved ? 'approved automatically' : 'waiting for review'}
+        </span>
+        {policy.autoApplySkipped && <span className="faint small">Not applied automatically: {policy.autoApplySkipped}</span>}
+      </div>
+      <Button size="sm" iconRight="arrow-right" onClick={() => navigate(`${base}/projects/${tenantId}/policies?version=${policy.version}`)}>
+        {policy.approved ? 'Open policy' : 'Review policy'}
+      </Button>
+    </div>
   );
 }

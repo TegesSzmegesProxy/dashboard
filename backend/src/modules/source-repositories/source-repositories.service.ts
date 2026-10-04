@@ -272,6 +272,22 @@ export class SourceRepositoriesService implements OnModuleInit {
     };
   }
 
+  /**
+   * The bound repository and the commit at the head of its default branch,
+   * for an analysis started from the dashboard. Null when nothing is bound.
+   */
+  async resolveHead(
+    organizationId: ObjectId,
+    tenantId: ObjectId,
+  ): Promise<{ source: RepositorySource; commitSha: string } | null> {
+    const source = await this.findSource(organizationId, tenantId);
+    if (!source) return null;
+    const commitSha = await this.callGitHub(() =>
+      this.github.getHeadCommit(source.installationId, source.repositoryId),
+    );
+    return { source, commitSha };
+  }
+
   private async assertTenant(
     organizationId: ObjectId,
     tenantId: ObjectId,

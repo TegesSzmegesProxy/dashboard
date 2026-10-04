@@ -8,6 +8,7 @@ import { PolicyCompilerModule } from '../policy-compiler/policy-compiler.module.
 import { ProjectsModule } from '../projects/projects.module.js';
 import { PoliciesController } from './policies.controller.js';
 import { PoliciesService } from './policies.service.js';
+import { ToolRegistryController } from './tool-registry.controller.js';
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { PoliciesService } from './policies.service.js';
     PolicyCompilerModule,
     ProjectsModule,
   ],
-  controllers: [PoliciesController],
+  controllers: [PoliciesController, ToolRegistryController],
   providers: [PoliciesService],
   exports: [PoliciesService],
 })

@@ -20,13 +20,19 @@ import { DashboardAuthGuard } from '../auth/dashboard-auth.guard.js';
 import type { DashboardPrincipal } from '../auth/dashboard-principal.js';
 import { OrganizationRoleGuard } from '../organizations/organization-role.guard.js';
 import { RequireOrganizationRoles } from '../organizations/organization-roles.decorator.js';
-import { PolicyVersionParamsDto } from '../policies/policy.dto.js';
+import {
+  CompileHumanReadablePolicyDto,
+  PolicyVersionParamsDto,
+} from '../policies/policy.dto.js';
 import { TenantParamsDto } from '../projects/project.dto.js';
 import {
   EditPolicyDto,
   PolicyGenerationParamsDto,
 } from './policy-generation.dto.js';
-import type { PolicyGenerationView } from './policy-generation.types.js';
+import type {
+  CompiledEndpointView,
+  PolicyGenerationView,
+} from './policy-generation.types.js';
 import { PolicyGenerationService } from './policy-generation.service.js';
 
 @ApiTags('policy generation')
@@ -35,6 +41,21 @@ import { PolicyGenerationService } from './policy-generation.service.js';
 @UseGuards(DashboardAuthGuard, OrganizationRoleGuard)
 export class PolicyGenerationController {
   constructor(private readonly generations: PolicyGenerationService) {}
+
+  /** Preview for the policy editor: compiles edited plain-language text. */
+  @Post('policies/v2/compile')
+  @HttpCode(HttpStatus.OK)
+  @RequireOrganizationRoles('owner', 'admin')
+  compile(
+    @Param() params: TenantParamsDto,
+    @Body() dto: CompileHumanReadablePolicyDto,
+  ): Promise<CompiledEndpointView> {
+    return this.generations.compileHumanReadablePolicy(
+      params.organizationId,
+      params.tenantId,
+      dto,
+    );
+  }
 
   @Post('policies/:version/edits')
   @HttpCode(HttpStatus.ACCEPTED)

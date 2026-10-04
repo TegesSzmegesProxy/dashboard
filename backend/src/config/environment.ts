@@ -23,7 +23,7 @@ export interface Environment {
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_ANALYSIS_MODEL: string;
   ANTHROPIC_POLICY_MODEL: string;
-  AI_MODEL_ALLOW_PRIVATE_BASE_URL: boolean;
+  ANALYSIS_AI_BASE_URL?: string;
   TELEMETRY_QUOTA_ENTRIES_PER_TENANT_HOUR: number;
   ANALYSIS_SANDBOX?: 'docker' | 'local-process';
   ANALYSIS_SANDBOX_IMAGE: string;
@@ -85,9 +85,11 @@ export const environmentSchema = Joi.object<Environment>({
   ANTHROPIC_API_KEY: Joi.string().empty('').min(1),
   ANTHROPIC_ANALYSIS_MODEL: Joi.string().trim().default('claude-opus-5-5'),
   ANTHROPIC_POLICY_MODEL: Joi.string().trim().default('claude-opus-5-5'),
-  // Lets organizations save a `local` AI model at a local, private or
-  // plain-http address (ADR-0017). Only for self-hosted control planes.
-  AI_MODEL_ALLOW_PRIVATE_BASE_URL: Joi.boolean().default(false),
+  // A self-hosted Anthropic-compatible model for analyses (ADR-0019). Chosen
+  // by the operator; no key is sent to it.
+  ANALYSIS_AI_BASE_URL: Joi.string()
+    .empty('')
+    .uri({ scheme: ['http', 'https'] }),
   TELEMETRY_QUOTA_ENTRIES_PER_TENANT_HOUR: Joi.number()
     .integer()
     .min(1)

@@ -1,3 +1,4 @@
+import type { EndpointPolicyV2 } from '../../contracts/policy/v2/policy.contract.js';
 import { ObjectId } from 'mongodb';
 
 export type PolicyGenerationKind = 'generate' | 'edit';
@@ -111,4 +112,16 @@ export interface PolicyGenerationView {
   createdAt: Date;
   startedAt: Date | null;
   finishedAt: Date | null;
+}
+
+/**
+ * Result of compiling an edited human-readable policy of one endpoint or
+ * field. A preview for the policy editor's draft; it creates no version.
+ */
+export interface CompiledEndpointView {
+  endpoint: EndpointPolicyV2;
+  /** What the tool registry could not express. */
+  limitations: string[];
+  /** True while the compiler is a placeholder that does not regenerate tools. */
+  mock: boolean;
 }

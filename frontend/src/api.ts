@@ -113,7 +113,7 @@ export type PolicyState =
   | 'PENDING_APPROVAL'
   | 'REJECTED';
 
-export interface PolicyVersion {
+export interface PolicyVersionV1 {
   id: string;
   version: string;
   schemaVersion: 'tessera.policy/v1';
@@ -129,6 +129,96 @@ export interface PolicyVersion {
   createdAt: string;
   lifecycleUpdatedAt: string;
 }
+
+// ---------- Endpoint policies (tessera.policy/v2, ADR-0014) ----------
+
+export type ToolScope = 'field' | 'file' | 'full';
+export type ToolCategory = 'schema' | 'injection' | 'url' | 'resource' | 'anomaly';
+/** One entry of `tessera.tools/v2`, served by the backend registry. */
+export interface ToolDefinition {
+  id: string;
+  label: string;
+  summary: string;
+  category: ToolCategory;
+  scope: ToolScope;
+  /** Needs runtime state; chosen from purpose rather than code, so review it. */
+  stateful: boolean;
+  useWhen: string;
+}
+export interface ToolRegistry { toolRegistryVersion: 'tessera.tools/v2'; tools: ToolDefinition[] }
+
+export type FieldLocation = 'body' | 'query' | 'path' | 'header' | 'cookie' | 'file';
+export interface FieldPolicyV2 {
+  name: string;
+  location: FieldLocation;
+  type: string;
+  required: boolean;
+  humanReadablePolicy: string;
+  tools: { toolId: string }[];
+  jevContext: string | null;
+}
+export interface EndpointPolicyV2 {
+  method: HttpMethod;
+  path: string;
+  humanReadablePolicy: string;
+  requestTools: { toolId: string }[];
+  jevContext: string | null;
+  fields: FieldPolicyV2[];
+}
+export interface StructuredPolicyV2 {
+  schemaVersion: 'tessera.policy/v2';
+  toolRegistryVersion: 'tessera.tools/v2';
+  endpoints: EndpointPolicyV2[];
+}
+/** Length limits of the v2 contract (backend contracts/policy/v2). */
+export const POLICY_V2_LIMITS = { endpointText: 2000, fieldText: 500, endpointJev: 1500, fieldJev: 500 } as const;
+
+export interface ReviewWarning {
+  kind: 'analysis' | 'jev_context';
+  /** `METHOD path` */
+  endpoint: string;
+  /** `location:name`, or null for the endpoint */
+  field: string | null;
+  message: string;
+}
+export type PolicyVersionV2Origin =
+  | { kind: 'analysis'; analysisId: string; aiModel: string | null }
+  | { kind: 'draft'; parentVersion: string; analysisId: string | null; changedEndpoints: string[] };
+
+export interface PolicyVersionV2 {
+  id: string;
+  version: string;
+  schemaVersion: 'tessera.policy/v2';
+  toolRegistryVersion: 'tessera.tools/v2';
+  structuredPolicy: StructuredPolicyV2;
+  compilationStatus: 'compiled' | 'failed';
+  compilationIssues: string[];
+  reviewWarnings: ReviewWarning[];
+  approvalStatus: 'approved' | 'not_applicable' | 'pending' | 'rejected';
+  approvalSource: 'manual' | 'auto_apply' | null;
+  rejectionReason: string | null;
+  state: PolicyState;
+  origin: PolicyVersionV2Origin;
+  precisionWarning: string | null;
+  /** False until proxies accept a bundle schema that carries policy v2. */
+  activatable: boolean;
+  createdBy: string;
+  createdAt: string;
+  lifecycleUpdatedAt: string;
+}
+
+export type PolicyVersion = PolicyVersionV1 | PolicyVersionV2;
+
+/** Preview from `POST policies/v2/compile`; it creates no version. */
+export interface CompiledEndpoint {
+  endpoint: EndpointPolicyV2;
+  limitations: string[];
+  /** The compiler is still a placeholder that leaves the checks unchanged. */
+  mock: boolean;
+}
+
+/** Chosen before generation: review the policy, or apply it automatically (ADR-0018). */
+export type PolicyReviewMode = 'review' | 'auto_apply';
 
 export interface ActiveBundle {
   version: string;
@@ -200,9 +290,34 @@ export interface AnalysisEstimate {
   aiCredentialConfigured: boolean;
 }
 
+/** What this deployment provides for analyses; the model is chosen in the control plane's `.env` (ADR-0019). */
+export interface AnalysisReadiness {
+  ai: { configured: boolean; model: string; mode: 'anthropic' | 'local' | null };
+  /** False when the control plane has no analysis sandbox, so source cannot be fetched. */
+  sandboxConfigured: boolean;
+  /** An analysis of this project that has not finished; only one runs at a time. */
+  activeAnalysis: { id: string; status: AnalysisStatus } | null;
+}
+
+/** Latest environment snapshot of a project (`tessera -get-environment`, ADR-0016). */
+export interface EnvironmentStatus {
+  available: boolean;
+  latest: {
+    id: string;
+    collectionCompletedAt: string;
+    toolStatus: Record<string, 'ok' | 'failed' | 'skipped'>;
+    counts: { openPorts: number; nucleiFindings: number; vulnerabilities: number; misconfigurations: number; secretFindings: number; httpTargets: number };
+  } | null;
+  ageHours: number | null;
+  /** Tells the user to run `tessera -get-environment` when no snapshot exists. */
+  notice: string | null;
+}
+
 export interface AnalysisSummary {
   id: string;
-  uploadId: string;
+  /** Null when the dashboard started the analysis rather than a collector. */
+  uploadId: string | null;
+  startedBy: string | null;
   commitSha: string;
   status: AnalysisStatus;
   phase: 'estimate' | 'analyze';
@@ -219,10 +334,16 @@ export interface AnalysisSummary {
     errorCode?: string;
     message?: string;
   }[];
+  policyReview: { mode: PolicyReviewMode; chosenBy: string; chosenAt: string } | null;
+  /** The pending policy version committed with the analysis. */
+  policy: { version: string; approved: boolean; autoApplySkipped: string | null } | null;
   errorCode: string | null;
   createdAt: string;
   finishedAt: string | null;
 }
+
+/** Why the analysis chose a tool; `inferred` goes beyond what the code shows. */
+export interface ToolChoice { toolId: string; basis: 'observed' | 'inferred' | 'environment'; rationale: string }
 
 export interface AnalysisEndpoint {
   method: HttpMethod;
@@ -231,14 +352,18 @@ export interface AnalysisEndpoint {
   auth: { required: 'yes' | 'no' | 'unknown'; mechanism: string };
   humanReadablePolicy: string;
   jevContext: string | null;
-  requestTools: { toolId: string }[];
+  requestTools: ToolChoice[];
   fields: {
     name: string;
     location: string;
     type: string;
     required: boolean;
-    tools: { toolId: string }[];
+    constraints: string[];
+    tools: ToolChoice[];
+    humanReadablePolicy?: string;
   }[];
+  observedLimits: { subject: string; limit: string }[];
+  findings: { category: string; severity: string; title: string; description: string; basis: string }[];
   limitations: string[];
   warnings: string[];
 }
@@ -378,8 +503,6 @@ export interface PolicyGeneration {
 /** Organization JEV credential (ADR-0009). The key itself is write-only. */
 export interface JevIntegration { connected: boolean; version: number | null; updatedAt: string | null }
 
-/** Organization default AI model credential (ADR-0010). The key itself is write-only. */
-export interface AiModelIntegration { connected: boolean; provider: 'openai' | 'anthropic' | 'local' | 'custom' | null; baseUrl: string | null; version: number | null; updatedAt: string | null }
 
 /** Customer-visible manifest of one collector upload. */
 export interface AnalysisUpload {
@@ -420,6 +543,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Contract paths of a 422, e.g. `endpoints.3.jevContext: credential`. */
+    readonly issues: string[] = [],
   ) {
     super(message);
   }
@@ -448,11 +573,13 @@ export function useApi() {
         // Nest default error body: { statusCode, message: string | string[], error }
         const data = (await res.json().catch(() => null)) as {
           message?: string | string[];
+          issues?: string[];
         } | null;
         const m = data?.message;
         throw new ApiError(
           res.status,
           Array.isArray(m) ? m.join('; ') : (m ?? res.statusText),
+          data?.issues ?? [],
         );
       }
       return (res.status === 204 ? undefined : await res.json()) as T;

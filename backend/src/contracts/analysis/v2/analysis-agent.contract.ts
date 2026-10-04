@@ -19,6 +19,7 @@ import {
   FIELD_LOCATIONS_V2,
   FIELD_NAME_PATTERN,
   MAX_ENDPOINT_JEV_CONTEXT,
+  MAX_FIELD_HUMAN_READABLE_POLICY,
   MAX_FIELD_JEV_CONTEXT,
   MAX_FIELDS_PER_ENDPOINT,
   MAX_HUMAN_READABLE_POLICY,
@@ -185,6 +186,10 @@ export class FieldFindingDto {
   @ValidateNested({ each: true })
   @Type(() => ToolChoiceDto)
   tools!: ToolChoiceDto[];
+
+  @IsString()
+  @MaxLength(MAX_FIELD_HUMAN_READABLE_POLICY)
+  humanReadablePolicy!: string;
 
   @ValidateIf((field: FieldFindingDto) => field.jevContext !== null)
   @IsString()
@@ -510,6 +515,7 @@ export const SUBMIT_ENDPOINT_SCHEMA: Schema = obj({
         constraints: arr(str()),
         evidence: evidenceList,
         tools: arr(toolChoiceSchema),
+        humanReadablePolicy: str(),
         jevContext: nullableStr(),
       }),
     ),
