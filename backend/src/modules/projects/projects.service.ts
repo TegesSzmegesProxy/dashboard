@@ -41,6 +41,7 @@ export class ProjectsService implements OnModuleInit {
     actorSubject: string,
   ): Promise<TenantView> {
     this.validateUpstream(dto.runtimeConfiguration.upstreamUrl);
+    this.validateDecision(dto.runtimeConfiguration);
     try {
       return await this.mongo.transaction(async (session) => {
         const organizationObjectId = objectId(organizationId);
@@ -168,6 +169,7 @@ export class ProjectsService implements OnModuleInit {
     }
     if (dto.runtimeConfiguration) {
       this.validateUpstream(dto.runtimeConfiguration.upstreamUrl);
+      this.validateDecision(dto.runtimeConfiguration);
     }
     try {
       return await this.mongo.transaction(async (session) => {
@@ -239,6 +241,21 @@ export class ProjectsService implements OnModuleInit {
 
   private get collection() {
     return this.mongo.db.collection<TenantDocument>('tenants');
+  }
+
+  private validateDecision(config: TenantRuntimeConfiguration): void {
+    if (
+      config.decision.sampling.minN > config.samplingRate ||
+      config.samplingRate > config.decision.sampling.maxN ||
+      (config.decision.sampling.minN === 0 &&
+        (config.samplingRate !== 0 || config.decision.sampling.maxN !== 0)) ||
+      config.decision.jev.attackProbabilityFloor >
+        config.decision.jev.attackProbabilityThreshold
+    ) {
+      throw new BadRequestException(
+        'Invalid decision sampling bounds or JEV threshold',
+      );
+    }
   }
 
   private validateUpstream(value: string): void {

@@ -18,7 +18,8 @@ code and the existing `backend/` application.
 
 The sibling `../proxy` repository is useful for compatibility checks, but this
 repository must not import its implementation. Cross-repository data belongs
-in versioned wire contracts, ultimately published as `@tessera/contracts`.
+in versioned wire contracts kept in the proxy repository. Keep this backend's
+transport definitions compatible without importing proxy implementation.
 
 ## Non-negotiable boundaries
 
@@ -87,4 +88,3 @@ in versioned wire contracts, ultimately published as `@tessera/contracts`.
 - Update `ARCHITECTURE.md` when a system boundary or cross-deployable contract
   changes. Keep implementation status and phased work in the implementation
   plan instead of duplicating it here.
-

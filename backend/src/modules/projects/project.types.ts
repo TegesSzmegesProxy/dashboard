@@ -14,6 +14,17 @@ export interface TenantRuntimeConfiguration {
     maxRequestBodyBytes: number;
   };
   samplingRate: number;
+  decision: {
+    sampling: { minN: number; maxN: number };
+    jev: {
+      attackProbabilityThreshold: number;
+      attackProbabilityFloor: number;
+      locked: boolean;
+    };
+    onStaticAnalysisError: RuntimeBehavior;
+    onSuspiciousJevUnavailable: RuntimeBehavior;
+    onSampledJevUnavailable: RuntimeBehavior;
+  };
 }
 
 export interface TenantDocument {

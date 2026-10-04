@@ -42,6 +42,10 @@
 - **Active bundle**: the signed, immutable unit distributed to a proxy. It
   combines one tenant's runtime configuration and compiled policy under one
   version.
+- **Runtime decision settings**: the tenant's explicit sampling bounds, JEV
+  threshold and floor, and separate actions for static-analysis errors and
+  unavailable JEV. They travel in bundle v2; `failureBehavior` alone does not
+  define them.
 - **Active version**: the bundle selected by the control plane for distribution.
   It can differ from the version currently loaded by a running proxy.
 - **Loaded version**: the verified bundle currently used by a proxy process.

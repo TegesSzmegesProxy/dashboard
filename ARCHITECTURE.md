@@ -79,7 +79,8 @@ contract, tool identifiers, and tool configs before persisting or using the
 bundle. Secrets never belong in a bundle. Cross-repository contract evolution
 must account for proxies upgrading later than the hosted control plane.
 
-The current schema is `tessera.bundle/v1` (ADR-0005). Proxies pull it from
+The current activation schema is `tessera.bundle/v2` (ADR-0012); existing v1
+bundles remain immutable and serve compatible proxies. Proxies pull it from
 `GET /api/v1/tenants/:tenantId/active-bundle` with a deployment key, declare
 the bundle schemas and tool registries they support in request headers, and
 poll with `If-None-Match`. They report loaded versions to
@@ -136,4 +137,3 @@ The backend is an early NestJS modular monolith with configuration validation,
 Swagger setup, and a health module. The root HTML files are mockups; a frontend
 stack has not been selected. The authoritative implementation sequence and
 open decisions are in `backend/IMPLEMENTATION_PLAN.md`.
-

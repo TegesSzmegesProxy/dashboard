@@ -92,8 +92,8 @@ trusted as authorization.
   deployment secret and is never stored in MongoDB.
 - External AI access is hidden behind a provider-independent interface with
   schema-validated structured output.
-- Cross-repository wire contracts are published as a separately versioned
-  `@tessera/contracts` package. The proxy must not import dashboard internals.
+- Versioned wire schemas live in the proxy repository. This backend maintains
+  matching transport definitions and the proxy never imports dashboard internals.
 
 ## 5. API conventions
 
@@ -180,16 +180,17 @@ Exit criteria: an authorized proxy receives only its tenants' signed bundles;
 tampering and unsupported formats are rejected during manual compatibility
 verification with the proxy repository.
 
-Decision: bundles use `tessera.bundle/v1`, Ed25519 signatures over RFC 8785
-canonical bytes, and required `Tessera-Bundle-Schemas` /
+Decision: new activations use `tessera.bundle/v2` with explicit runtime decision
+settings (ADR-0012); existing v1 bundles remain immutable. Ed25519 signatures
+cover canonical bytes, and required `Tessera-Bundle-Schemas` /
 `Tessera-Tool-Registries` request headers (406 when the active bundle is not
 acceptable). Activation builds and signs the bundle transactionally; runtime
 configuration edits stay pending until re-activation. See ADR-0005.
 
-Status: the control-plane side is implemented and manually verified. Manual
-compatibility verification against the proxy remains open because the proxy
-does not yet implement bundle verification, and the contracts still live in
-`src/contracts` rather than `@tessera/contracts` (ADR-0004).
+Status: the control plane emits v2 and the proxy verifies signed v2 bundles,
+including wrong-tenant, tampered and unknown-tool cases in local tests. A live
+dashboard-to-proxy run remains open. Wire schemas live in the proxy repository
+by deployment decision; this backend keeps matching transport definitions.
 
 ### Phase 5 — collector and application analysis
 
@@ -256,7 +257,8 @@ for later delivery, and the attack-rate alert is opt-in per project with no
 default threshold. See ADR-0008.
 
 Status: control-plane side implemented and manually verified against MongoDB
-with simulated proxy batches. The proxy does not send telemetry yet.
+with simulated proxy batches. The proxy now sends redacted minute counters;
+a live dashboard-to-proxy run remains open.
 
 ## 7. Verification policy — no automated tests
 

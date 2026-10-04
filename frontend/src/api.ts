@@ -47,6 +47,16 @@ export interface RuntimeConfiguration {
   routing: { pathPrefix: string };
   thresholds: { requestTimeoutMs: number; maxRequestBodyBytes: number };
   samplingRate: number;
+  decision: DecisionSettings;
+}
+
+/** Bundle v2 decision settings (ADR-0012); always chosen explicitly. */
+export interface DecisionSettings {
+  sampling: { minN: number; maxN: number };
+  jev: { attackProbabilityThreshold: number; attackProbabilityFloor: number; locked: boolean };
+  onStaticAnalysisError: Behavior;
+  onSuspiciousJevUnavailable: Behavior;
+  onSampledJevUnavailable: Behavior;
 }
 
 export interface Project {
@@ -54,7 +64,8 @@ export interface Project {
   organizationId: string;
   name: string;
   slug: string;
-  runtimeConfiguration: RuntimeConfiguration;
+  /** Projects stored before ADR-0012 have no decision settings yet. */
+  runtimeConfiguration: Omit<RuntimeConfiguration, 'decision'> & { decision?: DecisionSettings };
   createdAt: string;
   updatedAt: string;
 }

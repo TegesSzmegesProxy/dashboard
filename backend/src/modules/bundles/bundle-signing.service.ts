@@ -11,10 +11,10 @@ import {
 import { canonicalJson, JsonValue } from '../../common/canonical-json.js';
 import { Environment } from '../../config/environment.js';
 import {
-  ActiveBundleV1Payload,
   BUNDLE_SIGNATURE_ALGORITHM,
   BundleSignatureV1,
 } from '../../contracts/bundle/v1/bundle.contract.js';
+import type { ActiveBundleV2Payload } from '../../contracts/bundle/v2/bundle.contract.js';
 
 @Injectable()
 export class BundleSigningService {
@@ -45,7 +45,7 @@ export class BundleSigningService {
   }
 
   /** Returns the canonical payload bytes that were signed, plus the signature. */
-  sign(payload: ActiveBundleV1Payload): {
+  sign(payload: ActiveBundleV2Payload): {
     canonicalPayload: string;
     signature: BundleSignatureV1;
   } {
