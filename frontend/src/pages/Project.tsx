@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useApi, usePaged, useResource, type ActiveBundle, type GitHubInstallation, type Project as ProjectT, type ProxyInstance, type RepositoryBinding } from '../api';
-import { Badge, Button, Dialog, Input, Select, StatTile, Tabs } from '../components';
-import { useOrg } from '../Layout';
+import { Badge, Button, Dialog, Input, Select, StatTile } from '../components';
+import { PROJECT_SECTIONS, useOrg } from '../Layout';
 import { LoadMore, Loading, Note, PageHead, ProxyBadges, Section, useAction, when } from '../ui';
 import { ProjectAnalyses } from './ProjectAnalyses';
 import { ProjectOperations } from './ProjectOperations';
@@ -10,23 +10,14 @@ import { ProjectPolicies } from './ProjectPolicies';
 import { ProjectTuning } from './ProjectTuning';
 import { RuntimeConfigFields, toDraft, validateRuntime } from './RuntimeConfigFields';
 
-const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'operations', label: 'Operations' },
-  { id: 'policies', label: 'Policies' },
-  { id: 'analyses', label: 'Analyses' },
-  { id: 'tuning', label: 'Tuning' },
-  { id: 'settings', label: 'Settings' },
-];
-
 export function Project() {
-  const { tenantId = '' } = useParams();
-  const { org } = useOrg();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') ?? 'overview';
+  const { tenantId = '', section } = useParams();
+  const { org, base } = useOrg();
+  const tab = section ?? '';
   const project = useResource<ProjectT>(`/organizations/${org.id}/projects/${tenantId}`);
   const p = project.data;
 
+  if (!PROJECT_SECTIONS.some((s) => s.id === tab)) return <Navigate to={`${base}/projects/${tenantId}/overview`} replace />;
   if (project.error) return <Note tone="error">{project.error}</Note>;
   if (!p) return <Loading what="project" />;
   const path = `/organizations/${org.id}/projects/${p.id}`;
@@ -34,7 +25,6 @@ export function Project() {
   return (
     <>
       <PageHead title={p.name} desc={<span className="mono">{p.slug} → {p.runtimeConfiguration.upstreamUrl}</span>} />
-      <Tabs tabs={TABS} value={tab} onChange={(id) => setParams({ tab: id }, { replace: true })} style={{ marginBottom: 'var(--space-6)' }} />
       {tab === 'overview' && <Overview path={path} />}
       {tab === 'operations' && <ProjectOperations path={path} />}
       {tab === 'tuning' && <ProjectTuning path={path} />}

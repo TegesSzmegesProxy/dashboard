@@ -39,7 +39,10 @@ services:
 
   api:
     profiles: ['app']
-    build: .
+    build:
+      context: .
+      # The Dockerfile's last stage is the analysis sandbox (repo-host), not the API.
+      target: runtime
     # Secrets (API_KEY_HASH_SECRET, BUNDLE_SIGNING_PRIVATE_KEY, ...) come from
     # .env; connection settings below override it for the container network.
     env_file: .env

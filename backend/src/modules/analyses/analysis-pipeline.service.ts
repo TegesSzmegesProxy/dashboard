@@ -41,6 +41,7 @@ import type {
 } from '../../repo-host/protocol.js';
 import { AiCredentialError } from '../integrations/ai-model-credential.errors.js';
 import { AiModelCredentialService } from '../integrations/ai-model-credential.service.js';
+import type { AnalysisModelCredential } from '../integrations/ai-model-credential.types.js';
 import {
   ENVIRONMENT_MISSING_NOTICE,
   EnvironmentSnapshotDocument,
@@ -405,7 +406,7 @@ export class AnalysisPipeline {
       'route_like_files',
       { limit: 2_000 },
     );
-    const aiCredentialConfigured = await this.credentials.hasAnthropicKey(
+    const aiCredentialConfigured = await this.credentials.hasAnalysisCredential(
       job.organizationId,
     );
     const estimate = estimateAnalysis(
@@ -472,9 +473,11 @@ export class AnalysisPipeline {
     }
     const index = await this.indexRepository(context);
 
-    let apiKey: string;
+    let credential: AnalysisModelCredential;
     try {
-      apiKey = await this.credentials.resolveAnthropicKey(job.organizationId);
+      credential = await this.credentials.resolveAnalysisCredential(
+        job.organizationId,
+      );
     } catch (error) {
       if (error instanceof AiCredentialError && error.retryable) {
         throw new PhaseStop({ kind: 'retry', errorCode: error.code });
@@ -486,16 +489,29 @@ export class AnalysisPipeline {
       recorder.record(
         'recon',
         'failed',
-        'The organization has no usable AI provider key',
+        error instanceof AiCredentialError
+          ? error.message
+          : 'The organization has no usable AI provider key',
         code,
       );
       await this.saveSteps(job, leaseOwner, recorder);
       return { kind: 'finished', status: 'failed', errorCode: code };
     }
     const client = new Anthropic({
-      apiKey,
       maxRetries: 2,
       timeout: 15 * 60_000,
+      ...(credential.provider === 'local'
+        ? {
+            baseURL: credential.baseUrl,
+            // No key: explicit nulls keep the SDK from reading platform keys
+            // from the environment and sending them to the local endpoint.
+            apiKey: null,
+            authToken: null,
+            defaultHeaders: { 'x-api-key': null },
+            // A redirect would bypass the endpoint check (ADR-0017).
+            fetchOptions: { redirect: 'error' as const },
+          }
+        : { apiKey: credential.apiKey }),
     });
 
     const snapshot = await this.snapshots.findLatest(

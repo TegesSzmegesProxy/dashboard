@@ -21,18 +21,66 @@
   font: var(--fw-medium) var(--fs-small) var(--font-sans);
 }
 .nav { display: flex; flex-direction: column; gap: 2px; }
-.nav-label { padding: var(--space-3) var(--space-3) var(--space-1); }
+.nav-label { padding: var(--space-6) var(--space-3) var(--space-1); }
+.sidebar .eyebrow { font-size: var(--fs-caption); }
 .nav a {
   display: flex; align-items: center; gap: var(--space-3);
   min-height: 36px; padding: 0 var(--space-3); border-radius: var(--radius-sm);
   color: var(--stone-700); text-decoration: none;
-  font: var(--fw-medium) var(--fs-small) var(--font-sans);
+  font: var(--fw-medium) var(--fs-body) var(--font-sans);
   transition: background var(--dur-fast) var(--ease-out);
 }
 .nav a:hover { background: var(--bone-200); color: var(--text-strong); }
 .nav a.active { background: var(--surface-card); box-shadow: var(--shadow-1); color: var(--text-strong); }
 .nav a .muted { margin-left: auto; }
-.sidebar-foot { margin-top: auto; padding: 0 var(--space-2); }
+.nav-compact { display: flex; flex-direction: column; }
+.nav-compact a { min-height: 30px; }
+.nav-group > button {
+  display: flex; align-items: center; gap: var(--space-3); width: 100%;
+  min-height: 36px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm);
+  background: none; color: var(--stone-700); cursor: pointer; text-align: left;
+  font: var(--fw-medium) var(--fs-body) var(--font-sans);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.nav-group > button:hover { background: var(--bone-200); color: var(--text-strong); }
+.nav-group > button.current { color: var(--text-strong); }
+.nav-group > button .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-sub {
+  display: flex; flex-direction: column; gap: 2px;
+  margin: 2px 0 var(--space-1) var(--space-5); padding-left: var(--space-2);
+  border-left: 1px solid var(--border-subtle);
+}
+.sidebar-foot {
+  display: flex; flex-direction: column;
+  margin-top: auto; padding: var(--space-4) var(--space-2) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.user { display: flex; align-items: center; gap: var(--space-2); }
+/* Slides up from the bottom of the sidebar, under the user row. */
+.drawer {
+  display: grid; grid-template-rows: 0fr; opacity: 0;
+  transition: grid-template-rows var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+.sidebar-foot.open .drawer { grid-template-rows: 1fr; opacity: 1; }
+/* chevron-down rotated: points up while the drawer is closed. */
+.user .ts-ib svg { transform: rotate(180deg); transition: transform var(--dur-base) var(--ease-out); }
+.sidebar-foot.open .user .ts-ib svg { transform: none; }
+.drawer-body {
+  min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; gap: var(--space-4);
+}
+.sidebar-foot.open .drawer-body { padding-top: var(--space-4); }
+/* Square corners throughout the sidebar. */
+.sidebar .nav a, .sidebar .nav-group > button, .sidebar select, .sidebar .ts-ib, .sidebar .ts-btn { border-radius: 0; }
+.user-id { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.user-meta {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-muted); font-size: var(--fs-caption);
+}
+.user-name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-strong); font: var(--fw-medium) var(--fs-body) var(--font-sans);
+}
 
 .main { min-width: 0; }
 .topbar {
@@ -160,3 +208,6 @@ input[type='range'] { width: 100%; accent-color: var(--blue-500); }
 .dots { display: flex; justify-content: center; align-items: center; gap: var(--space-2); margin-top: var(--space-4); }
 .dots > span { width: 8px; height: 8px; background: var(--border-default); }
 .dots > span.on { background: var(--blue-500); }
+
+/* StatTile sets its radius inline; stat tiles in the main view are square like Section cards. */
+.stats > * { border-radius: 0 !important; }

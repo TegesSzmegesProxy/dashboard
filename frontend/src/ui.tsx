@@ -18,7 +18,7 @@ export function PageHead({ title, desc, children }: { title: string; desc?: Reac
 
 export function Section(props: { title: string; desc?: ReactNode; aside?: ReactNode; children?: ReactNode; id?: string }) {
   return (
-    <Card id={props.id} aria-label={props.title}>
+    <Card id={props.id} aria-label={props.title} radius="0">
       <div className="card-head">
         <h2>{props.title}</h2>
         {props.aside}

@@ -243,9 +243,11 @@ export class AnalysesService implements OnModuleInit {
         `The ceiling must be above 0 and at most ${MAX_CEILING_USD} USD`,
       );
     }
-    if (!(await this.credentials.hasAnthropicKey(document.organizationId))) {
+    if (
+      !(await this.credentials.hasAnalysisCredential(document.organizationId))
+    ) {
       throw new ConflictException(
-        'Connect an Anthropic API key for the organization before approving a budget',
+        'Connect an Anthropic API key or a local model for the organization before approving a budget',
       );
     }
     const now = new Date();

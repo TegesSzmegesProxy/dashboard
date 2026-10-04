@@ -357,9 +357,11 @@ only after an explicit project decision changes this policy.
    residency for AI processing is not yet decided.
 8. The organization AI model credential (ADR-0010) is consumed by analyses
    (ADR-0015): an Anthropic key is required, and analyses never fall back to
-   the platform `ANTHROPIC_API_KEY`. Still open: whether it also replaces the
-   platform key for policy generation, and how `openai` and `custom`
-   providers (including a custom endpoint URL) are supported.
+   the platform `ANTHROPIC_API_KEY`. The `custom` provider is replaced by
+   `local`, a keyless Anthropic-compatible endpoint that analyses can also
+   use (ADR-0017). Still open: whether the credential also replaces the
+   platform key for policy generation, and how the `openai` provider is
+   supported.
 9. Project tuning settings are stored per ADR-0011 but not yet consumed.
    Open: which model the model settings configure (JEV runtime
    classification or policy generation), and how policy defaults and endpoint

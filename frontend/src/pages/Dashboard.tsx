@@ -113,7 +113,7 @@ export function Dashboard() {
                     </span>
                     <span className="actions">
                       <Badge status={projectStatus(fleet[p.id])[0]}>{projectStatus(fleet[p.id])[1]}</Badge>
-                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigate(`${base}/projects/${p.id}?tab=settings`); }}>Open settings</Button>
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigate(`${base}/projects/${p.id}/settings`); }}>Open settings</Button>
                     </span>
                   </li>
                 ))}

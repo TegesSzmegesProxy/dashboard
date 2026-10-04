@@ -7,10 +7,13 @@ import { Loading, Note, ProposedNote, Section, useAction, when } from '../ui';
 // Both credentials are backed by the integrations module (JEV: ADR-0009, AI model: ADR-0010).
 // The key is write-only: it is sent once, cleared from state, and never read back or displayed.
 
-function Credential<T extends { connected: boolean }>({ title, desc, path, required, fields, status, disconnectNote }: {
-  title: string; desc: string; path: string; required: string[]; disconnectNote: string;
+function Credential<T extends { connected: boolean }>({ title, desc, path, required, fields, status, disconnectNote, initial }: {
+  title: string; desc: string; path: string; disconnectNote: string;
+  required: string[] | ((values: Record<string, string>) => string[]);
   fields: (set: (k: string, v: string) => void, values: Record<string, string>) => React.ReactNode;
   status: (d: T) => string;
+  /** Non-secret values to prefill when replacing a key. */
+  initial?: (d: T) => Record<string, string>;
 }) {
   const { org, canEdit } = useOrg();
   const api = useApi();
@@ -22,7 +25,9 @@ function Credential<T extends { connected: boolean }>({ title, desc, path, requi
   const [confirm, setConfirm] = useState(false);
   const connected = r.data?.connected === true;
   const showForm = canEdit && r.status !== 'loading' && (!connected || replacing);
-  const body = { ...values };
+  // Empty optional fields are left out rather than sent as "".
+  const missing = (typeof required === 'function' ? required(values) : required).some((k) => !values[k]?.trim());
+  const body = Object.fromEntries(Object.entries(values).filter(([, v]) => v.trim() !== ''));
 
   return (
     <Section title={title} desc={desc} aside={<Badge status={connected ? 'passed' : r.status === 'missing' ? 'review' : 'neutral'}>{connected ? 'Connected' : r.status === 'missing' ? 'Endpoint pending' : 'Not connected'}</Badge>}>
@@ -38,14 +43,14 @@ function Credential<T extends { connected: boolean }>({ title, desc, path, requi
           }}>
             {fields((k, v) => setValues((s) => ({ ...s, [k]: v })), values)}
             <div className="actions">
-              <Button type="submit" disabled={run.pending || required.some((k) => !values[k])}>{connected ? 'Replace key' : 'Save'}</Button>
+              <Button type="submit" disabled={run.pending || missing}>{connected ? 'Replace' : 'Save'}</Button>
               {replacing && <Button variant="ghost" onClick={() => { setReplacing(false); setValues({}); }}>Cancel</Button>}
             </div>
           </form>
         )}
         {canEdit && connected && !replacing && (
           <div className="actions">
-            <Button variant="outline" onClick={() => setReplacing(true)}>Replace key</Button>
+            <Button variant="outline" onClick={() => { setValues(r.data && initial ? initial(r.data) : {}); setReplacing(true); }}>Replace</Button>
             <Button variant="ghost" onClick={() => setConfirm(true)}>Disconnect</Button>
           </div>
         )}
@@ -76,14 +81,21 @@ export function JevIntegrationCard() {
 
 export function AiModelCard() {
   return (
-    <Credential title="Global AI model API key" desc="Default model credentials for all projects." path="ai-model" required={['provider', 'apiKey']}
-      disconnectNote="The stored key is deleted and cannot be recovered. Save a new key to reconnect."
-      status={(d: AiModelIntegration) => `${d.provider ?? 'provider'} · version ${d.version ?? '—'} · updated ${when(d.updatedAt)}`}
+    <Credential title="Global AI model" desc="Default model for all projects: a provider API key, or the address of a local model with an Anthropic-compatible API." path="ai-model"
+      required={(v) => v.provider === 'local' ? ['provider', 'baseUrl'] : ['provider', 'apiKey']}
+      disconnectNote="The stored key or address is deleted and cannot be recovered. Save it again to reconnect."
+      status={(d: AiModelIntegration) => `${d.provider ?? 'provider'}${d.baseUrl ? ` · ${d.baseUrl}` : ''} · version ${d.version ?? '—'} · updated ${when(d.updatedAt)}`}
+      initial={(d: AiModelIntegration): Record<string, string> => d.provider === 'local' ? { provider: 'local', baseUrl: d.baseUrl ?? '' } : {}}
       fields={(set, v) => (
         <>
-          <Select label="Provider" value={v.provider ?? ''} onChange={(e) => set('provider', e.target.value)}
-            options={[{ value: '', label: 'Choose a provider' }, { value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }, { value: 'custom', label: 'Custom' }]} />
-          {keyInput(set, v)}
+          <Select label="Provider" value={v.provider ?? ''} onChange={(e) => { set('provider', e.target.value); set('apiKey', ''); set('baseUrl', ''); }}
+            options={[{ value: '', label: 'Choose a provider' }, { value: 'openai', label: 'OpenAI' }, { value: 'anthropic', label: 'Anthropic' }, { value: 'local', label: 'Local' }]} />
+          {v.provider === 'local' ? (
+            <>
+              <Input label="Base URL" type="url" autoComplete="off" placeholder="http://localhost:11434" value={v.baseUrl ?? ''} onChange={(e) => set('baseUrl', e.target.value)} />
+              <p className="small muted" style={{ margin: 0 }}>Local and private addresses work only when the control plane allows them (AI_MODEL_ALLOW_PRIVATE_BASE_URL).</p>
+            </>
+          ) : v.provider ? keyInput(set, v) : null}
         </>
       )} />
   );

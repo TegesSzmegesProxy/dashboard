@@ -379,7 +379,7 @@ export interface PolicyGeneration {
 export interface JevIntegration { connected: boolean; version: number | null; updatedAt: string | null }
 
 /** Organization default AI model credential (ADR-0010). The key itself is write-only. */
-export interface AiModelIntegration { connected: boolean; provider: 'openai' | 'anthropic' | 'custom' | null; version: number | null; updatedAt: string | null }
+export interface AiModelIntegration { connected: boolean; provider: 'openai' | 'anthropic' | 'local' | 'custom' | null; baseUrl: string | null; version: number | null; updatedAt: string | null }
 
 /** Customer-visible manifest of one collector upload. */
 export interface AnalysisUpload {

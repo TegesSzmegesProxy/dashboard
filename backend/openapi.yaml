@@ -1574,16 +1574,25 @@ components:
           enum:
             - openai
             - anthropic
-            - custom
+            - local
         apiKey:
           type: string
           description: >-
-            AI model provider API key. Write-only: it is encrypted at rest and
+            AI model provider API key, required for openai and anthropic and
+            not accepted for local. Write-only: it is encrypted at rest and
             never returned to the dashboard.
           writeOnly: true
+        baseUrl:
+          type: string
+          description: >-
+            Endpoint of a local model with an Anthropic-compatible API, for
+            example http://localhost:11434. Required for local and not
+            accepted for other providers. Local, private and plain-http
+            addresses are accepted only when the control plane sets
+            AI_MODEL_ALLOW_PRIVATE_BASE_URL.
+          example: http://localhost:11434
       required:
         - provider
-        - apiKey
     PutJevCredentialDto:
       type: object
       properties:

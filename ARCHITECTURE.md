@@ -28,7 +28,10 @@ Client traffic -> Proxy -> protected application
 
 The proxy and collector initiate outbound HTTPS requests. The control plane
 never connects into a customer's network. Its only outbound call for source
-is to GitHub, through a GitHub App installation that the customer linked. A control-plane outage must not
+is to GitHub, through a GitHub App installation that the customer linked.
+Analyses call the organization's AI model: the Anthropic API, or a `local`
+model at an address the organization chose. That address must be public
+unless a self-hosted control plane allows private ones (ADR-0017). A control-plane outage must not
 interrupt a proxy that already has a verified bundle.
 
 ## Trust boundaries and API surfaces

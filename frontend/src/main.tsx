@@ -62,7 +62,7 @@ createRoot(document.getElementById('root')!).render(
                 <Route index element={<Dashboard />} />
                 <Route path="api-keys" element={<ApiKeys />} />
                 <Route path="settings" element={<OrgSettings />} />
-                <Route path="projects/:tenantId" element={<Project />} />
+                <Route path="projects/:tenantId/:section?" element={<Project />} />
               </Route>
               <Route path="*" element={<OrgGate />} />
             </Routes>

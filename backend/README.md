@@ -80,10 +80,18 @@ credential is configured. See ADR-0009.
 
 Owners and admins set the organization's default AI model key with
 `PUT /api/v1/organizations/:organizationId/integrations/ai-model`
-(`provider`: `openai` | `anthropic` | `custom`, `apiKey`), read its status
-with `GET` and disconnect it with `DELETE`. It is stored like the JEV
-credential and never returned. Analyses use it (ADR-0015; `anthropic` only, no
-fallback to the platform key); policy generation does not yet. See ADR-0010.
+(`provider`: `openai` | `anthropic` with `apiKey`, or `local` with
+`baseUrl`), read its status with `GET` and disconnect it with `DELETE`. The
+key is stored like the JEV credential and never returned. Analyses use an
+`anthropic` key or a `local` model, with no fallback to the platform key
+(ADR-0015, ADR-0017). Policy generation does not use the credential yet. See
+ADR-0010.
+
+`local` sends analyses to a self-hosted model with an Anthropic-compatible
+API, without a key. By default its `baseUrl` must be a public `https` URL. To
+allow local, private or plain-`http` addresses such as
+`http://localhost:11434`, set `AI_MODEL_ALLOW_PRIVATE_BASE_URL=true`. Use this
+only on a self-hosted control plane. See ADR-0017.
 
 ### Project tuning settings
 
