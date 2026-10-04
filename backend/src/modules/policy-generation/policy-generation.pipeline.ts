@@ -7,16 +7,11 @@ import {
   normalizeAiPolicyOutput,
 } from '../../contracts/policy-generation/v1/ai-policy.contract.js';
 import type { StructuredPolicyV1Dto } from '../../contracts/policy/v1/policy.contract.js';
-import { AiProviderError } from '../../infrastructure/ai/application-analysis.provider.js';
+import { AiProviderError } from '../../infrastructure/ai/ai-provider-error.js';
 import {
-  PolicyGenerationAnalysisContext,
   PolicyGenerationInput,
   PolicyGenerationProvider,
 } from '../../infrastructure/ai/policy-generation.provider.js';
-import {
-  AnalysesService,
-  AnalysisPolicyContext,
-} from '../analyses/analyses.service.js';
 import {
   PolicyContent,
   PoliciesService,
@@ -58,14 +53,13 @@ export type GenerationOutcome =
 /**
  * Turns one attempt into a validated, compiled policy or a failure. AI output
  * is untrusted: it must match the contract, contain no detectable
- * credentials, compile against the tool registry and, when an analysis is
- * linked, reference only endpoints and fields known to it.
+ * credentials and compile against the tool registry. Only natural-language
+ * edits of v1 policies remain; analyses propose endpoint policies directly.
  */
 @Injectable()
 export class PolicyGenerationPipeline {
   constructor(
     private readonly provider: PolicyGenerationProvider,
-    private readonly analyses: AnalysesService,
     private readonly policies: PoliciesService,
     private readonly compiler: PolicyCompilerService,
   ) {}
@@ -88,16 +82,12 @@ export class PolicyGenerationPipeline {
       provenance,
     });
 
-    let analysis: AnalysisPolicyContext | null = null;
-    if (attempt.analysisId) {
-      analysis = await this.analyses.findPolicyContext(
-        attempt.organizationId,
-        attempt.tenantId,
-        attempt.analysisId,
+    if (attempt.kind !== 'edit') {
+      // Analyses now propose endpoint policies themselves (ADR-0009).
+      return fail(
+        'ANALYSIS_UNAVAILABLE',
+        'Whole-policy generation from analyses was replaced by analysis policy proposals',
       );
-      if (!analysis) {
-        return fail('ANALYSIS_UNAVAILABLE', 'The analysis is not available');
-      }
     }
     let base: PolicyContent | null = null;
     if (attempt.kind === 'edit') {
@@ -116,23 +106,20 @@ export class PolicyGenerationPipeline {
       }
     }
 
-    const analysisContext = analysis ? this.toProviderContext(analysis) : null;
-    let input: PolicyGenerationInput;
-    if (base) {
-      input = {
-        mode: 'edit',
-        analysis: analysisContext,
-        basePolicy: {
-          humanReadableIntent: base.humanReadableIntent,
-          structuredPolicy: base.structuredPolicy,
-        },
-        instruction: attempt.instruction!,
-      };
-    } else if (analysisContext) {
-      input = { mode: 'generate', analysis: analysisContext };
-    } else {
-      return fail('ANALYSIS_UNAVAILABLE', 'The analysis is not available');
+    if (!base) {
+      return fail(
+        'BASE_POLICY_UNAVAILABLE',
+        'The base policy version is not available',
+      );
     }
+    const input: PolicyGenerationInput = {
+      mode: 'edit',
+      basePolicy: {
+        humanReadableIntent: base.humanReadableIntent,
+        structuredPolicy: base.structuredPolicy,
+      },
+      instruction: attempt.instruction!,
+    };
 
     let response;
     try {
@@ -205,23 +192,6 @@ export class PolicyGenerationPipeline {
       );
     }
 
-    // 4. Grounding: no endpoints or fields the analysis does not know about.
-    if (analysis) {
-      const issues = this.ungrounded(
-        output.structuredPolicy,
-        analysis,
-        base?.structuredPolicy ?? null,
-      );
-      if (issues.length > 0) {
-        return fail(
-          'UNGROUNDED_OUTPUT',
-          'AI output referenced endpoints or fields unknown to the analysis',
-          provenance,
-          issues.slice(0, MAX_VALIDATION_ISSUES),
-        );
-      }
-    }
-
     return {
       kind: 'succeeded',
       provenance,
@@ -240,78 +210,6 @@ export class PolicyGenerationPipeline {
           : null,
       },
     };
-  }
-
-  private toProviderContext(
-    analysis: AnalysisPolicyContext,
-  ): PolicyGenerationAnalysisContext {
-    // Evidence locations are omitted: they add tokens, not policy signal.
-    return {
-      endpoints: analysis.results.apiSurface.map((endpoint) => ({
-        method: endpoint.method,
-        path: endpoint.path,
-        description: endpoint.description,
-        fields: endpoint.fields.map((field) => ({
-          name: field.name,
-          location: field.location,
-          type: field.type,
-          required: field.required,
-          constraints: field.constraints,
-        })),
-      })),
-      configuration: analysis.results.configuration.map((item) => ({
-        name: item.name,
-        summary: item.summary,
-      })),
-      findings: analysis.results.findings.map((finding) => ({
-        category: finding.category,
-        severity: finding.severity,
-        title: finding.title,
-        description: finding.description,
-        basis: finding.basis,
-      })),
-    };
-  }
-
-  private ungrounded(
-    policy: StructuredPolicyV1Dto,
-    analysis: AnalysisPolicyContext,
-    base: StructuredPolicyV1Dto | null,
-  ): string[] {
-    const known = new Map<string, Set<string>>();
-    const add = (endpoint: string, targets: string[]): void => {
-      const set = known.get(endpoint) ?? new Set<string>();
-      targets.forEach((target) => set.add(target));
-      known.set(endpoint, set);
-    };
-    for (const endpoint of analysis.results.apiSurface) {
-      add(
-        `${endpoint.method} ${endpoint.path}`,
-        endpoint.fields.map((field) => field.name),
-      );
-    }
-    for (const endpoint of base?.endpoints ?? []) {
-      add(
-        `${endpoint.method} ${endpoint.path}`,
-        endpoint.tools.map((tool) => tool.target),
-      );
-    }
-    const issues: string[] = [];
-    policy.endpoints.forEach((endpoint, endpointIndex) => {
-      const targets = known.get(`${endpoint.method} ${endpoint.path}`);
-      if (!targets) {
-        issues.push(`structuredPolicy.endpoints.${endpointIndex}: unknown`);
-        return;
-      }
-      endpoint.tools.forEach((tool, toolIndex) => {
-        if (!targets.has(tool.target)) {
-          issues.push(
-            `structuredPolicy.endpoints.${endpointIndex}.tools.${toolIndex}.target: unknown`,
-          );
-        }
-      });
-    });
-    return issues;
   }
 
   private diff(

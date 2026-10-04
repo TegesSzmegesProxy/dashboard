@@ -13,7 +13,6 @@ import { isDuplicateKey, objectId } from '../../common/mongodb.js';
 import { detectSecrets } from '../../common/secret-detection.js';
 import { AnalysisUploadV1Dto } from '../../contracts/analysis-upload/v1/analysis-upload.contract.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
-import { ObjectStorage } from '../../infrastructure/object-storage/object-storage.js';
 import { AnalysesService } from '../analyses/analyses.service.js';
 import type { MachinePrincipal } from '../api-keys/api-key.types.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -32,7 +31,6 @@ export class AnalysisUploadsService implements OnModuleInit {
   constructor(
     private readonly mongo: MongoDatabase,
     private readonly audit: AuditService,
-    private readonly storage: ObjectStorage,
     private readonly projects: ProjectsService,
     private readonly repositories: SourceRepositoriesService,
     private readonly analyses: AnalysesService,
@@ -93,9 +91,8 @@ export class AnalysisUploadsService implements OnModuleInit {
       );
     }
 
-    const environmentObject = await this.storage.put(
-      Buffer.from(JSON.stringify(dto.environment), 'utf8'),
-    );
+    // Environment context now comes from environment snapshots (ADR-0012);
+    // the upload's environment section is summarized, not stored.
     try {
       return await this.mongo.transaction(async (session) => {
         const uploadId = new ObjectId();
@@ -105,7 +102,6 @@ export class AnalysisUploadsService implements OnModuleInit {
             tenantId: tenantObjectId,
             uploadId,
             commitSha: dto.sourceRevision.commitSha,
-            environmentObject,
           },
           session,
         );
@@ -163,7 +159,6 @@ export class AnalysisUploadsService implements OnModuleInit {
         };
       });
     } catch (error) {
-      await this.storage.delete(environmentObject.key);
       if (isDuplicateKey(error)) {
         const raced = await this.findPrior(
           organizationObjectId,

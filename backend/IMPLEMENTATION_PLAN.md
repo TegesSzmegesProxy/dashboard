@@ -21,7 +21,7 @@ proxy that already has a valid bundle.
 ```text
 src/
   common/                 shared HTTP, errors, logging, crypto primitives
-  infrastructure/         MongoDB, Redis, jobs, object storage, AI adapters
+  infrastructure/         MongoDB, Redis, sandbox, secret store, AI adapters
   modules/
     auth/                  dashboard identity, sessions, guards
     organizations/         organizations, memberships, roles
@@ -56,10 +56,15 @@ trusted as authorization.
 - `ApiKey`: hash, type, scopes, organization, allowed tenants, timestamps,
   revocation state. Plaintext is returned once.
 - `AnalysisUpload`: source revision, schema version, collector identity,
-  environment summary and collector redaction manifest. The raw package lives
-  in transient object storage until its analysis finishes.
-- `Analysis`: immutable version, API surface, dependencies, CVEs, environment,
-  findings and source attribution.
+  environment summary and collector redaction manifest. No raw package is
+  stored.
+- `EnvironmentSnapshot`: one redacted `tessera -get-environment` result;
+  the latest N per tenant are kept (ADR-0012).
+- `Analysis`: immutable version, estimate, budget and usage, dossier, route
+  rules, evidence-backed endpoint facts, coverage, AI read manifest and a
+  pending `tessera.policy/v2` proposal. Its work items are separate documents.
+- `AiCredential`: an organization's provider key reference and fingerprint;
+  the key itself is in the secret store (ADR-0011).
 - `PolicyVersion`: immutable human intent, structured intent, compilation state,
   toolchain, content hash and approval state.
 - `ActiveBundle`: schema version, runtime configuration, compiled policy,
@@ -76,9 +81,10 @@ trusted as authorization.
   policies, bundles, telemetry metadata and audit records.
 - Redis is non-authoritative and supports queues, rate limiting, idempotency,
   caching and outbox delivery coordination.
-- Raw collector packages belong in transient object storage, deleted when
-  their analysis finishes; MongoDB stores metadata and a content hash.
-  Repository source is never persisted (ADR-0006).
+- Collector uploads are stored as metadata only. Repository source exists
+  only inside the per-job analysis sandbox and is never persisted (ADR-0009).
+- Customer AI keys live in a secret manager behind `SecretStore`; MongoDB
+  holds only references and fingerprints (ADR-0011).
 - Signing uses Ed25519. The private key comes from a secret manager or
   deployment secret and is never stored in MongoDB.
 - External AI access is hidden behind a provider-independent interface with
@@ -203,7 +209,8 @@ provider-independent interface. See ADR-0006.
 
 Status: implemented and manually verified with stubbed GitHub and AI network
 calls. A live GitHub App installation and a real Claude call have not been
-exercised yet.
+exercised yet. Source handling and AI analysis are being replaced by Phase 8
+(ADR-0009).
 
 ### Phase 6 — policy generation and editing
 
@@ -226,7 +233,9 @@ an origin and a fixed precision warning; failed attempts create none. See
 ADR-0007.
 
 Status: implemented and manually verified against MongoDB with a stubbed AI
-provider. A real Claude call has not been exercised yet.
+provider. A real Claude call has not been exercised yet. Whole-policy
+generation is being replaced by Phase 8; edits become per endpoint
+(ADR-0010).
 
 ### Phase 7 — telemetry and operations
 
@@ -248,6 +257,56 @@ default threshold. See ADR-0008.
 
 Status: control-plane side implemented and manually verified against MongoDB
 with simulated proxy batches. The proxy does not send telemetry yet.
+
+### Phase 8 — agentic analysis and endpoint policies
+
+Replaces the single-call analysis and whole-policy generation of Phases 5–6.
+
+- M0: ADR-0009, ADR-0010, glossary, contracts `analysis/v2`, `policy/v2`,
+  `tools/v2` registry module and `bundle/v2`.
+- M1: per-job analysis sandbox (`repo-host` image, no network, tmpfs) fed
+  from the existing GitHub tarball path; the worker becomes its own
+  deployable with container-runtime access.
+- M2: language-agnostic index (inventory, tree-sitter, API specs, generic
+  heuristics, route-rule engine, framework-pack interface; first pack
+  Express + NestJS).
+- M3: durable work items with leases; analysis status machine.
+- M4: Claude tool-use loop with enforced budgets, serve-time redaction and
+  the AI read manifest.
+- M5: recon, endpoint, sweep and endpoint-edit prompts.
+- M6: pipeline assembly, reconciliation and coverage gate; analysis and
+  pending policy version committed together.
+- M7: compiler, policy versions and bundles v2; per-endpoint edits.
+- M8: dashboard API for coverage, endpoint policies and edits.
+- M9: selective verification pass, incremental re-analysis, cost limits.
+- M10: removal of the v1 analysis and policy paths.
+
+Exit criteria: for sample applications in several languages, every route the
+framework itself lists is either an endpoint in the analysis or a visible
+unresolved work item; the sandbox has no network and never sees credentials;
+an endpoint edit produces a version that differs only in that endpoint.
+
+Decision: see ADR-0009 (accepted) and ADR-0010 (proposed until the tool
+list is confirmed).
+
+Status: M0-M6 and the M8 analysis routes are implemented:
+- contracts, environment snapshots, organization AI keys with a secret store;
+- the sandbox and `repo-host` with the language-agnostic index and the Express
+  and NestJS pack;
+- the agent loop with enforced budgets, prompts, and the estimate, recon,
+  workers, sweep and reconcile pipeline.
+
+They were verified with lint, typecheck, build and a scratch end-to-end run.
+That run used a local MongoDB, `repo-host` as a local process, a stubbed
+GitHub tarball and a fake Anthropic API. It exercised the estimate, approval,
+budget enforcement, coverage gate, reconciliation and environment ingestion.
+Not yet exercised: the Docker sandbox (no Docker access in development), a live
+GitHub App and a real model.
+
+Next:
+- M7: v2 policy versions from proposals, per-endpoint edits and bundle v2.
+- M9: verification pass and incremental re-analysis.
+- Analysis does not set endpoint `sampling` yet.
 
 ## 7. Verification policy — no automated tests
 
@@ -278,7 +337,20 @@ only after an explicit project decision changes this policy.
    bundle schemas and delayed proxy upgrade compatibility are defined by
    ADR-0005.
 7. Collector upload contents, file allowlist, retention and storage are
-   defined by ADR-0006. Data residency for AI processing is not yet decided.
+   defined by ADR-0006, with source handling replaced by ADR-0009. Data
+   residency for AI processing is not yet decided.
+8. The `tessera.tools/v2` registry (ADR-0010) holds the 20 tools the proxy
+   implements, without configuration. Before v2 bundles are distributed the
+   proxy must read v2 bundles and present JEV context to JEV as data. Tool
+   configuration is a later, joint contract change.
+9. Analyses are paid with each organization's own Anthropic API key, after a
+   cost estimate and an approved budget ceiling. Key storage (secret manager
+   or envelope encryption) needs ADR-0011 before implementation, because
+   provider credentials must not be stored in the database in plaintext.
+10. Environment context comes from snapshots the customer uploads with
+    `tessera -get-environment` (httpx, Lynis, nmap, nuclei, Trivy), stored in
+    MongoDB. Without one, analyses run and tell the user to run the command.
+    Contract, re-redaction, retention and Lynis trust need ADR-0012.
 
 These decisions must be recorded as ADRs before the dependent module is
 implemented.

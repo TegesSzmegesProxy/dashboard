@@ -31,9 +31,9 @@ in versioned wire contracts, ultimately published as `@tessera/contracts`.
   unavailable. A failed build, validation, signature, or pull must never replace
   the currently active bundle.
 - The collector redacts environment context before upload and never uploads
-  source files. Source is fetched from the project's bound GitHub repository,
-  then filtered and redacted in memory before storage or AI processing
-  (ADR-0006). Never persist or log secrets, raw request bodies, authorization
+  source files. Source is fetched from the project's bound GitHub repository
+  into a disposable, network-less analysis sandbox, and anything sent to the
+  AI provider is redacted first (ADR-0009). Never persist or log secrets, raw request bodies, authorization
   headers, cookies, or unredacted source.
 - Derive organization and tenant access from the authenticated user or API
   key. Never trust a client-provided `organizationId` or `tenantId` as

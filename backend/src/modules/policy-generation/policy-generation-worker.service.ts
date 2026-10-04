@@ -20,14 +20,12 @@ const LEASE_MS = 15 * 60_000;
 const LEASE_RENEW_MS = 60_000;
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 60_000;
-const INBOX_CONSUMER = 'policy-generation';
-const INBOX_BATCH = 20;
 
 class LeaseLostError extends Error {}
 
 /**
- * Durable policy generation. Consumes `AnalysisCompleted` from the outbox,
- * then processes attempts claimed with a lease. A successful attempt stores
+ * Durable policy generation (natural-language edits). Processes attempts
+ * claimed with a lease. A successful attempt stores
  * a pending policy version, the attempt result and its outbox event in one
  * transaction; a failed attempt stores no policy version at all.
  */
@@ -70,7 +68,6 @@ export class PolicyGenerationWorker
 
   private async drain(): Promise<void> {
     try {
-      await this.consumeAnalysisEvents();
       let job = await this.claim();
       while (job && !this.stopping) {
         await this.process(job);
@@ -81,18 +78,6 @@ export class PolicyGenerationWorker
       this.logger.error(
         `Policy generation worker tick failed: ${error instanceof Error ? error.name : 'unknown'}`,
       );
-    }
-  }
-
-  private async consumeAnalysisEvents(): Promise<void> {
-    const events = await this.outbox.findUnconsumed(
-      INBOX_CONSUMER,
-      ['AnalysisCompleted'],
-      INBOX_BATCH,
-    );
-    for (const event of events) {
-      if (this.stopping) return;
-      await this.generations.enqueueFromAnalysisEvent(event, INBOX_CONSUMER);
     }
   }
 

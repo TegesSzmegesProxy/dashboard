@@ -1,21 +1,51 @@
 import { ObjectId } from 'mongodb';
 import type {
-  AiConfigurationItemDto,
-  AiEndpointDto,
-  AiFindingDto,
-} from '../../contracts/analysis/v1/ai-analysis.contract.js';
-import type { VulnerabilitySeverity } from '../../contracts/analysis-upload/v1/analysis-upload.contract.js';
-import type { StoredObject } from '../../infrastructure/object-storage/object-storage.js';
+  ANALYSIS_SCHEMA_V2,
+  AUTH_REQUIRED,
+  CONFIDENCES,
+  DossierDto,
+  EvidenceBasis,
+  FINDING_CATEGORIES,
+  FINDING_SEVERITIES,
+  SINK_KINDS,
+} from '../../contracts/analysis/v2/analysis-agent.contract.js';
+import type { PolicyHttpMethod } from '../../contracts/policy/v1/policy.contract.js';
+import type {
+  FieldLocationV2,
+  StructuredPolicyV2,
+} from '../../contracts/policy/v2/policy.contract.js';
+import type { ToolId } from '../../contracts/tools/v2/tool-registry.js';
+import type { TokenUsage } from '../../infrastructure/ai/pricing.js';
+import type {
+  CandidateLocation,
+  ExtractionSummary,
+  LanguageTier,
+  RouteCandidate,
+  RouteRule,
+} from '../../repo-host/protocol.js';
 
 export type AnalysisStatus =
-  'queued' | 'running' | 'completed' | 'partial' | 'failed';
+  | 'queued'
+  | 'running'
+  | 'awaiting_budget'
+  | 'paused'
+  | 'completed'
+  | 'partial'
+  | 'failed';
+
+/** `estimate` runs without any model call; `analyze` spends the budget. */
+export type AnalysisPhase = 'estimate' | 'analyze';
 
 export type AnalysisStepName =
   | 'source_fetch'
-  | 'source_redaction'
-  | 'dependencies'
-  | 'vulnerabilities'
-  | 'ai_analysis';
+  | 'index'
+  | 'environment'
+  | 'estimate'
+  | 'recon'
+  | 'route_rules'
+  | 'endpoints'
+  | 'sweep'
+  | 'reconcile';
 
 export interface AnalysisStep {
   name: AnalysisStepName;
@@ -26,80 +56,146 @@ export interface AnalysisStep {
   finishedAt: Date;
 }
 
-export type ExclusionReason =
-  | 'excluded_directory'
-  | 'denied_file'
-  | 'unsupported_type'
-  | 'file_too_large'
-  | 'binary_content'
-  | 'private_key_material'
-  | 'file_count_limit'
-  | 'total_size_limit';
+export interface RangeEstimate {
+  low: number;
+  expected: number;
+  high: number;
+}
 
-/** Customer-visible record of exactly which source left GitHub for analysis. */
-export interface SourceManifest {
-  repository: string;
-  commitSha: string;
-  includedFiles: {
-    path: string;
-    sizeBytes: number;
-    sha256: string;
-    redactions: Record<string, number>;
+/** Computed from the index alone, before any model call (ADR-0011). */
+export interface AnalysisEstimate {
+  model: string;
+  workItems: RangeEstimate;
+  inputTokens: RangeEstimate;
+  outputTokens: RangeEstimate;
+  usd: RangeEstimate;
+  /** Smallest ceiling expected to cover every work item. */
+  suggestedCeilingUsd: number;
+  assumptions: string[];
+  aiCredentialConfigured: boolean;
+}
+
+export interface AnalysisBudget {
+  ceilingUsd: number;
+  approvedBy: string;
+  approvedAt: Date;
+  source: 'manual' | 'auto';
+}
+
+export interface AnalysisUsage {
+  usd: number;
+  tokens: TokenUsage;
+  byStep: Partial<Record<'recon' | 'endpoints' | 'sweep', number>>;
+  models: string[];
+}
+
+export interface IndexSummary {
+  files: number;
+  bytes: number;
+  languages: Record<string, number>;
+  tiers: Record<LanguageTier, number>;
+  frameworkGuesses: string[];
+  dependencyManifests: string[];
+  specFiles: string[];
+  symbols: number;
+  strongCandidates: number;
+  heuristicCandidates: number;
+  candidatesTruncated: boolean;
+}
+
+export interface AnalysisEnvironmentInfo {
+  snapshotId: string | null;
+  collectedAt: Date | null;
+  ageHours: number | null;
+  /** The `tessera -get-environment` notice when no snapshot exists. */
+  notice: string | null;
+}
+
+/** Exactly which source the AI provider received, per file. */
+export interface AiReadManifest {
+  files: { path: string; ranges: [number, number][]; redactions: number }[];
+  searchPreviews: number;
+  totalLinesSent: number;
+}
+
+export interface Evidence {
+  path: string;
+  startLine: number;
+  endLine: number;
+}
+
+export interface ToolChoice {
+  toolId: ToolId;
+  basis: EvidenceBasis;
+  rationale: string;
+}
+
+export interface EndpointField {
+  name: string;
+  location: FieldLocationV2;
+  type: string;
+  required: boolean;
+  constraints: string[];
+  evidence: Evidence[];
+  tools: ToolChoice[];
+  jevContext: string | null;
+}
+
+export interface EndpointFinding {
+  category: (typeof FINDING_CATEGORIES)[number];
+  severity: (typeof FINDING_SEVERITIES)[number];
+  title: string;
+  description: string;
+  basis: EvidenceBasis;
+  evidence: Evidence[];
+}
+
+/** One reconciled endpoint with its facts and proposed endpoint policy. */
+export interface EndpointRecord {
+  method: PolicyHttpMethod;
+  path: string;
+  handler: Evidence | null;
+  confidence: (typeof CONFIDENCES)[number];
+  auth: {
+    required: (typeof AUTH_REQUIRED)[number];
+    mechanism: string;
+    evidence: Evidence[];
+  };
+  contentTypes: string[];
+  observedLimits: { subject: string; limit: string; evidence: Evidence[] }[];
+  sinks: {
+    kind: (typeof SINK_KINDS)[number];
+    field: string | null;
+    evidence: Evidence[];
   }[];
-  excludedCounts: Partial<Record<ExclusionReason, number>>;
-  /** First excluded paths, capped; counts above are complete. */
-  excludedSamples: { path: string; reason: ExclusionReason }[];
-  totals: {
-    entriesScanned: number;
-    includedFiles: number;
-    includedBytes: number;
-    redactions: number;
-  };
-  truncated: boolean;
-  limits: {
-    maxFiles: number;
-    maxFileBytes: number;
-    maxTotalBytes: number;
-  };
+  fields: EndpointField[];
+  requestTools: ToolChoice[];
+  jevContext: string | null;
+  humanReadablePolicy: string;
+  limitations: string[];
+  findings: EndpointFinding[];
+  /** Review warnings from reconciliation (JEV context lint, dropped evidence). */
+  warnings: string[];
+  workItemIds: string[];
 }
 
-export interface AnalyzedDependency {
-  name: string;
-  version: string;
-  ecosystem: string;
-  purl: string | null;
-  sources: string[];
-}
-
-export interface AnalyzedVulnerability {
-  id: string;
-  packageName: string;
-  installedVersion: string;
-  fixedVersion: string | null;
-  severity: VulnerabilitySeverity;
-  sources: string[];
-  /** The affected package version appears in the dependency inventory. */
-  matchedDependency: boolean;
-}
-
-export interface EnvironmentToolRun {
-  name: string;
-  version: string;
-  status: 'succeeded' | 'failed';
-  error: string | null;
+export interface CoverageSummary {
+  workItems: number;
+  endpoints: number;
+  notAnEndpoint: number;
+  duplicate: number;
+  unresolved: number;
+  overflow: number;
+  /** Heuristic hits that no work item explained. */
+  heuristicUnexplained: number;
+  heuristicReviewedBySweep: number;
 }
 
 export interface AnalysisResults {
-  environmentTools: EnvironmentToolRun[];
-  dependencies: AnalyzedDependency[];
-  vulnerabilities: AnalyzedVulnerability[];
-  apiSurface: AiEndpointDto[];
-  configuration: AiConfigurationItemDto[];
-  findings: AiFindingDto[];
-  attribution: {
-    discardedEvidence: number;
-    downgradedFindings: number;
-  };
+  endpoints: EndpointRecord[];
+  policyProposal: StructuredPolicyV2;
+  coverage: CoverageSummary;
+  attribution: { discardedEvidence: number; downgradedFindings: number };
 }
 
 export interface AnalysisDocument {
@@ -108,29 +204,72 @@ export interface AnalysisDocument {
   tenantId: ObjectId;
   uploadId: ObjectId;
   commitSha: string;
+  schemaVersion: typeof ANALYSIS_SCHEMA_V2;
   status: AnalysisStatus;
+  phase: AnalysisPhase;
   attempts: number;
   availableAt: Date;
   leaseOwner?: string;
   leaseExpiresAt?: Date;
-  environmentObject: StoredObject | null;
-  /** Object keys still to delete; retried until empty. */
-  pendingObjectKeys: string[];
   repository: {
     provider: 'github';
     repositoryId: number;
     fullName: string;
   } | null;
-  manifest: SourceManifest | null;
+  extraction: ExtractionSummary | null;
+  index: IndexSummary | null;
+  environment: AnalysisEnvironmentInfo | null;
+  estimate: AnalysisEstimate | null;
+  budget: AnalysisBudget | null;
+  usage: AnalysisUsage;
+  dossier: DossierDto | null;
+  routeRules: RouteRule[] | null;
   steps: AnalysisStep[];
+  readManifest: AiReadManifest | null;
   results: AnalysisResults | null;
   version: string | null;
-  provenance: { aiProvider: string | null; aiModel: string | null };
   errorCode: string | null;
   createdAt: Date;
   startedAt: Date | null;
   finishedAt: Date | null;
-  rawDeletedAt: Date | null;
+}
+
+export type WorkItemStatus =
+  'pending' | 'endpoint' | 'not_an_endpoint' | 'duplicate' | 'unresolved';
+
+/** One candidate the coverage gate requires to be resolved explicitly. */
+export interface WorkItemDocument {
+  _id: ObjectId;
+  analysisId: ObjectId;
+  organizationId: ObjectId;
+  tenantId: ObjectId;
+  key: string;
+  method: string | null;
+  path: string | null;
+  sources: RouteCandidate['sources'];
+  locations: CandidateLocation[];
+  hints: string[];
+  /** Lower runs first. */
+  priority: number;
+  status: WorkItemStatus;
+  reason: string | null;
+  errorCode: string | null;
+  notes: string[];
+  result: EndpointRecord | null;
+  usd: number;
+  turns: number;
+  createdAt: Date;
+  finishedAt: Date | null;
+}
+
+export interface AnalysisSettingsDocument {
+  _id: ObjectId;
+  organizationId: ObjectId;
+  tenantId: ObjectId;
+  /** Explicit; analyses wait for approval when null (ADR-0011). */
+  autoApproveCeilingUsd: number | null;
+  updatedBy: string;
+  updatedAt: Date;
 }
 
 export interface AnalysisSummaryView {
@@ -140,18 +279,39 @@ export interface AnalysisSummaryView {
   uploadId: string;
   commitSha: string;
   status: AnalysisStatus;
+  phase: AnalysisPhase;
   version: string | null;
   repository: AnalysisDocument['repository'];
+  estimate: AnalysisEstimate | null;
+  budget: AnalysisBudget | null;
+  usage: AnalysisUsage;
+  environment: AnalysisEnvironmentInfo | null;
   steps: AnalysisStep[];
   errorCode: string | null;
   createdAt: Date;
   startedAt: Date | null;
   finishedAt: Date | null;
-  rawDeletedAt: Date | null;
 }
 
 export interface AnalysisView extends AnalysisSummaryView {
-  manifest: SourceManifest | null;
+  extraction: ExtractionSummary | null;
+  index: IndexSummary | null;
+  dossier: DossierDto | null;
+  routeRules: RouteRule[] | null;
+  readManifest: AiReadManifest | null;
   results: AnalysisResults | null;
-  provenance: AnalysisDocument['provenance'];
+}
+
+export interface WorkItemView {
+  id: string;
+  key: string;
+  method: string | null;
+  path: string | null;
+  sources: RouteCandidate['sources'];
+  locations: CandidateLocation[];
+  status: WorkItemStatus;
+  reason: string | null;
+  errorCode: string | null;
+  usd: number;
+  turns: number;
 }

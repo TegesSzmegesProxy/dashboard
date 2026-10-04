@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { validateEnvironment } from './config/environment.js';
 import { DatabaseModule } from './infrastructure/database/database.module.js';
 import { RedisModule } from './infrastructure/redis/redis.module.js';
+import { AiCredentialsModule } from './modules/ai-credentials/ai-credentials.module.js';
 import { AnalysesModule } from './modules/analyses/analyses.module.js';
 import { AnalysisUploadsModule } from './modules/analysis-uploads/analysis-uploads.module.js';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module.js';
@@ -10,6 +11,7 @@ import { ApprovalsModule } from './modules/approvals/approvals.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { BundlesModule } from './modules/bundles/bundles.module.js';
+import { EnvironmentSnapshotsModule } from './modules/environment-snapshots/environment-snapshots.module.js';
 import { EventsModule } from './modules/events/events.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { OrganizationsModule } from './modules/organizations/organizations.module.js';
@@ -43,6 +45,8 @@ import { TelemetryModule } from './modules/telemetry/telemetry.module.js';
     BundlesModule,
     TelemetryModule,
     SourceRepositoriesModule,
+    AiCredentialsModule,
+    EnvironmentSnapshotsModule,
     AnalysesModule,
     AnalysisUploadsModule,
     PolicyGenerationModule,

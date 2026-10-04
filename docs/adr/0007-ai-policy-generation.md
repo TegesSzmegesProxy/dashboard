@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Accepted. Automatic whole-policy generation from `AnalysisCompleted` is
+superseded by ADR-0009; editing is per endpoint under ADR-0010.
 
 ## Context
 

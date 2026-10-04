@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ObjectStorageModule } from '../../infrastructure/object-storage/object-storage.module.js';
 import { AnalysesModule } from '../analyses/analyses.module.js';
 import { ApiKeysModule } from '../api-keys/api-keys.module.js';
 import { AuditModule } from '../audit/audit.module.js';
@@ -19,7 +18,6 @@ import { AnalysisUploadsService } from './analysis-uploads.service.js';
     ApiKeysModule,
     AuditModule,
     AuthModule,
-    ObjectStorageModule,
     OrganizationsModule,
     ProjectsModule,
     SourceRepositoriesModule,

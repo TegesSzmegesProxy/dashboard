@@ -14,8 +14,13 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
-# Transient analysis storage; mounted as a volume by docker-compose.
-RUN mkdir -p /app/var/analysis-storage && chown -R node:node /app/var
 USER node
 EXPOSE 5000
 CMD ["node", "dist/main.js"]
+
+# Analysis sandbox image (ADR-0009): `docker build --target repo-host -t
+# tessera-repo-host .`. The worker runs it with no network, a read-only root
+# filesystem and an unprivileged user; it never receives credentials.
+FROM runtime AS repo-host
+USER 65534:65534
+ENTRYPOINT ["node", "dist/repo-host/main.js"]

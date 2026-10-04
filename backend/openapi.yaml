@@ -581,6 +581,87 @@ paths:
         - bearer: []
       tags:
         - source repositories
+  /api/v1/organizations/{organizationId}/ai-credentials/anthropic:
+    get:
+      operationId: AiCredentialsController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - ai credentials
+    put:
+      operationId: AiCredentialsController_set
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAiCredentialDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - ai credentials
+    delete:
+      operationId: AiCredentialsController_remove
+      parameters: []
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - ai credentials
+  /api/v1/tenants/{tenantId}/environment-snapshots:
+    post:
+      operationId: CollectorEnvironmentSnapshotsController_receive
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvironmentSnapshotV1Dto'
+      responses:
+        '202':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - collector
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/environment:
+    get:
+      operationId: EnvironmentSnapshotsController_status
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - environment
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/environment-snapshots/{snapshotId}:
+    get:
+      operationId: EnvironmentSnapshotsController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - environment
   /api/v1/organizations/{organizationId}/projects/{tenantId}/analyses:
     get:
       operationId: AnalysesController_list
@@ -596,6 +677,77 @@ paths:
     get:
       operationId: AnalysesController_get
       parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/analyses/{analysisId}/work-items:
+    get:
+      operationId: AnalysesController_workItems
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/analyses/{analysisId}/budget-approval:
+    post:
+      operationId: AnalysesController_approveBudget
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveBudgetDto'
+      responses:
+        '202':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/analyses/{analysisId}/resume:
+    post:
+      operationId: AnalysesController_resume
+      parameters: []
+      responses:
+        '202':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/analysis-settings:
+    get:
+      operationId: AnalysesController_settings
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analyses
+    put:
+      operationId: AnalysesController_setSettings
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisSettingsDto'
       responses:
         '200':
           description: ''
@@ -647,38 +799,6 @@ paths:
         - bearer: []
       tags:
         - analyses
-  /api/v1/organizations/{organizationId}/projects/{tenantId}/policy-generations:
-    post:
-      operationId: PolicyGenerationController_generate
-      parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GeneratePolicyDto'
-      responses:
-        '202':
-          description: ''
-      security:
-        - bearer: []
-      tags:
-        - policy generation
-    get:
-      operationId: PolicyGenerationController_list
-      parameters: []
-      responses:
-        '200':
-          description: ''
-      security:
-        - bearer: []
-      tags:
-        - policy generation
   /api/v1/organizations/{organizationId}/projects/{tenantId}/policies/{version}/edits:
     post:
       operationId: PolicyGenerationController_edit
@@ -696,6 +816,17 @@ paths:
               $ref: '#/components/schemas/EditPolicyDto'
       responses:
         '202':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - policy generation
+  /api/v1/organizations/{organizationId}/projects/{tenantId}/policy-generations:
+    get:
+      operationId: PolicyGenerationController_list
+      parameters: []
+      responses:
+        '200':
           description: ''
       security:
         - bearer: []
@@ -877,6 +1008,7 @@ components:
             type: string
             enum:
               - analysis-uploads:write
+              - environment-snapshots:write
               - bundles:read
               - heartbeats:write
               - telemetry:write
@@ -1240,6 +1372,41 @@ components:
         - installationId
         - owner
         - name
+    SetAiCredentialDto:
+      type: object
+      properties:
+        apiKey:
+          type: string
+          description: Anthropic API key. Write-only; never returned.
+      required:
+        - apiKey
+    EnvironmentSnapshotV1Dto:
+      type: object
+      properties:
+        schemaVersion:
+          type: string
+          enum:
+            - tessera.environment/v1
+    ApproveBudgetDto:
+      type: object
+      properties:
+        ceilingUsd:
+          type: number
+          description: Spending ceiling in USD; the analysis stops when it is reached.
+          example: 25
+      required:
+        - ceilingUsd
+    AnalysisSettingsDto:
+      type: object
+      properties:
+        autoApproveCeilingUsd:
+          type: object
+          nullable: true
+          description: >-
+            Analyses whose estimate fits under this ceiling start without manual
+            approval. Null requires approval for every analysis.
+      required:
+        - autoApproveCeilingUsd
     SourceRevisionV1Dto:
       type: object
       properties:
@@ -1397,14 +1564,6 @@ components:
         - collector
         - environment
         - redaction
-    GeneratePolicyDto:
-      type: object
-      properties:
-        analysisId:
-          type: string
-          description: Completed or partial analysis of this project
-      required:
-        - analysisId
     EditPolicyDto:
       type: object
       properties:

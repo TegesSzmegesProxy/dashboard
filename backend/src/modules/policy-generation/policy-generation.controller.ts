@@ -24,7 +24,6 @@ import { PolicyVersionParamsDto } from '../policies/policy.dto.js';
 import { TenantParamsDto } from '../projects/project.dto.js';
 import {
   EditPolicyDto,
-  GeneratePolicyDto,
   PolicyGenerationParamsDto,
 } from './policy-generation.dto.js';
 import type { PolicyGenerationView } from './policy-generation.types.js';
@@ -36,25 +35,6 @@ import { PolicyGenerationService } from './policy-generation.service.js';
 @UseGuards(DashboardAuthGuard, OrganizationRoleGuard)
 export class PolicyGenerationController {
   constructor(private readonly generations: PolicyGenerationService) {}
-
-  @Post('policy-generations')
-  @HttpCode(HttpStatus.ACCEPTED)
-  @RequireOrganizationRoles('owner', 'admin')
-  @ApiHeader({ name: 'Idempotency-Key', required: true })
-  generate(
-    @Param() params: TenantParamsDto,
-    @Body() dto: GeneratePolicyDto,
-    @Headers('idempotency-key') idempotencyKey: string | undefined,
-    @CurrentPrincipal() principal: DashboardPrincipal,
-  ): Promise<PolicyGenerationView> {
-    return this.generations.requestGeneration(
-      params.organizationId,
-      params.tenantId,
-      dto.analysisId,
-      idempotencyKey,
-      principal.subject,
-    );
-  }
 
   @Post('policies/:version/edits')
   @HttpCode(HttpStatus.ACCEPTED)

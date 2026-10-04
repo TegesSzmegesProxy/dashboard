@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Accepted. Control-side filtering and redaction limits, retention of
+source and the single-call AI analysis are superseded by ADR-0009.
 
 ## Context
 

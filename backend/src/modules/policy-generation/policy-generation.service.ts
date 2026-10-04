@@ -18,9 +18,8 @@ import { isDuplicateKey, objectId } from '../../common/mongodb.js';
 import { detectSecrets } from '../../common/secret-detection.js';
 import { NATURAL_LANGUAGE_PRECISION_WARNING } from '../../contracts/policy-generation/v1/ai-policy.contract.js';
 import { MongoDatabase } from '../../infrastructure/database/mongo-database.service.js';
-import { AnalysesService } from '../analyses/analyses.service.js';
 import { AuditService } from '../audit/audit.service.js';
-import { OutboxEvent, OutboxService } from '../events/outbox.service.js';
+import { OutboxService } from '../events/outbox.service.js';
 import { PoliciesService } from '../policies/policies.service.js';
 import { ProjectsService } from '../projects/projects.service.js';
 import {
@@ -54,7 +53,6 @@ export class PolicyGenerationService implements OnModuleInit {
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     private readonly projects: ProjectsService,
-    private readonly analyses: AnalysesService,
     private readonly policies: PoliciesService,
   ) {}
 
@@ -77,54 +75,6 @@ export class PolicyGenerationService implements OnModuleInit {
         },
       ),
     ]);
-  }
-
-  /** Requests a policy generated from an analysis of this tenant. */
-  async requestGeneration(
-    organizationId: string,
-    tenantId: string,
-    analysisId: string,
-    idempotencyKey: string | undefined,
-    actorSubject: string,
-  ): Promise<PolicyGenerationView> {
-    assertIdempotencyKey(idempotencyKey);
-    const organizationObjectId = objectId(organizationId);
-    const tenantObjectId = objectId(tenantId);
-    const analysisObjectId = objectId(analysisId);
-    return this.createRequested(
-      'generate',
-      organizationObjectId,
-      tenantObjectId,
-      idempotencyKey,
-      { analysisId },
-      async (session) => {
-        const analysis = await this.analyses.findPolicyContext(
-          organizationObjectId,
-          tenantObjectId,
-          analysisObjectId,
-          session,
-        );
-        if (!analysis) {
-          throw new NotFoundException('Finished analysis not found');
-        }
-        if (analysis.results.apiSurface.length === 0) {
-          throw new ConflictException(
-            'The analysis found no API surface to generate a policy from',
-          );
-        }
-        return {
-          organizationId: organizationObjectId,
-          tenantId: tenantObjectId,
-          kind: 'generate',
-          trigger: 'dashboard',
-          analysisId: analysis.analysisId,
-          analysisVersion: analysis.version,
-          baseVersion: null,
-          instruction: null,
-          requestedBy: actorSubject,
-        };
-      },
-    );
   }
 
   /** Requests a natural-language edit; the result is a new version. */
@@ -155,86 +105,26 @@ export class PolicyGenerationService implements OnModuleInit {
       tenantObjectId,
       idempotencyKey,
       { baseVersion, instruction: normalized },
-      async (session) => {
+      async () => {
         const base = await this.policies.findContent(
           organizationObjectId,
           tenantObjectId,
           baseVersion,
         );
         if (!base) throw new NotFoundException('Policy version not found');
-        // Edits keep the analysis their lineage was generated from, so the
-        // result stays grounded in the same API surface.
-        const lineageAnalysisId =
-          base.origin.kind === 'import' ? null : base.origin.analysisId;
-        const analysis = lineageAnalysisId
-          ? await this.analyses.findPolicyContext(
-              organizationObjectId,
-              tenantObjectId,
-              new ObjectId(lineageAnalysisId),
-              session,
-            )
-          : null;
         return {
           organizationId: organizationObjectId,
           tenantId: tenantObjectId,
           kind: 'edit',
           trigger: 'dashboard',
-          analysisId: analysis?.analysisId ?? null,
-          analysisVersion: analysis?.version ?? null,
+          analysisId: null,
+          analysisVersion: null,
           baseVersion,
           instruction: normalized,
           requestedBy: actorSubject,
         };
       },
     );
-  }
-
-  /**
-   * Inbox handler for `AnalysisCompleted`: queues a generation attempt for an
-   * analysis that found an API surface. Never activates anything.
-   */
-  async enqueueFromAnalysisEvent(
-    event: OutboxEvent,
-    consumer: string,
-  ): Promise<void> {
-    try {
-      await this.mongo.transaction(async (session) => {
-        const analysisId = event.payload.analysisId;
-        const analysis =
-          analysisId && ObjectId.isValid(analysisId)
-            ? await this.analyses.findPolicyContext(
-                event.organizationId,
-                event.tenantId,
-                new ObjectId(analysisId),
-                session,
-              )
-            : null;
-        if (analysis && analysis.results.apiSurface.length > 0) {
-          await this.insertAttempt(
-            {
-              organizationId: event.organizationId,
-              tenantId: event.tenantId,
-              kind: 'generate',
-              trigger: 'analysis_completed',
-              analysisId: analysis.analysisId,
-              analysisVersion: analysis.version,
-              baseVersion: null,
-              instruction: null,
-              requestedBy: POLICY_GENERATION_ACTOR,
-              sourceEventId: event.eventId,
-            },
-            session,
-          );
-        }
-        await this.outbox.markConsumed(event.eventId, consumer, session);
-      });
-    } catch (error) {
-      if (!isDuplicateKey(error)) throw error;
-      // Another instance queued it; only the receipt is missing.
-      await this.mongo.transaction((session) =>
-        this.outbox.markConsumed(event.eventId, consumer, session),
-      );
-    }
   }
 
   async list(

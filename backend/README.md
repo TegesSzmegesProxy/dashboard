@@ -67,34 +67,57 @@ Proxies use deployment keys to call
 
 ### Application analysis
 
-Collectors send `POST /api/v1/tenants/:tenantId/analysis-uploads` with a
-collector key, an `Idempotency-Key`, and a `tessera.analysis-upload/v1` body
-containing only the commit SHA and redacted environment tool results. Uploads
-containing detectable credentials are rejected. Source is fetched from the
-project's bound GitHub repository through the Tessera GitHub App, filtered to
-allowlisted files and redacted in memory. Raw collector packages are deleted
-when the analysis finishes.
+Analyses are agentic and sandboxed (ADR-0009 to ADR-0012):
+
+1. Collectors send `POST /api/v1/tenants/:tenantId/analysis-uploads` with a
+   collector key, an `Idempotency-Key`, and a `tessera.analysis-upload/v1`
+   body. Only the commit SHA starts the analysis; the environment section is
+   summarized, not stored.
+2. Environment context comes from `tessera -get-environment`, which posts
+   httpx, Lynis, nmap, nuclei and Trivy results to
+   `POST /api/v1/tenants/:tenantId/environment-snapshots` (collector key with
+   `environment-snapshots:write`). The latest snapshot is used; without one,
+   analyses run anyway and `GET .../projects/:tenantId/environment` returns
+   the notice to run the command.
+3. The worker streams the commit from the bound GitHub repository into a
+   per-job sandbox (`ANALYSIS_SANDBOX`) that indexes it for any language,
+   without network access or credentials. It then estimates the cost and
+   waits in `awaiting_budget`.
+4. An owner or admin stores the organization's Anthropic key
+   (`PUT /api/v1/organizations/:organizationId/ai-credentials/anthropic`,
+   requires `SECRET_STORE`) and approves a ceiling with
+   `POST .../analyses/:analysisId/budget-approval` (`ceilingUsd`,
+   `Idempotency-Key`). `PUT .../projects/:tenantId/analysis-settings` can set
+   an explicit auto-approve ceiling.
+5. Recon writes route rules that the sandbox applies to the whole
+   repository; one agent resolves each work item; a sweep looks for missed
+   routes. Every work item ends as an endpoint, not an endpoint, a duplicate,
+   or unresolved (`GET .../analyses/:analysisId/work-items`). The analysis
+   result holds evidence-backed endpoint facts, a pending
+   `tessera.policy/v2` proposal, coverage, cost and the AI read manifest.
+
+The ceiling is enforced after every model response; when it is reached, the
+remaining work items are unresolved and the analysis is `partial`. An
+analysis paused because the provider account ran out of credit continues with
+`POST .../analyses/:analysisId/resume`. Prompts live in
+`src/modules/analyses/prompts/`.
 
 Configure the GitHub App (`GITHUB_APP_*`, read-only Contents and Metadata, with
 "Request user authorization during installation" enabled). The dashboard then
 posts the setup callback's `installation_id` and `code` to
 `POST /api/v1/organizations/:organizationId/github-installations` and binds a
-repository with `PUT .../projects/:tenantId/repository`. Set
-`ANTHROPIC_API_KEY` to enable the AI step; without it analyses complete as
-`partial`. `ANALYSIS_STORAGE_DIR` must be a shared volume when running more
-than one instance.
+repository with `PUT .../projects/:tenantId/repository`.
 
-### Policy generation and editing
+### Policy editing
 
-When an analysis with an API surface completes, a policy generation attempt
-is queued automatically. Owners and admins can also request one with
-`POST .../projects/:tenantId/policy-generations` (`analysisId`) or edit a
-version in natural language with `POST .../policies/:version/edits`
-(`instruction`); both require an `Idempotency-Key` and return `202` with the
-attempt. Poll `GET .../policy-generations/:attemptId`. AI output is validated,
-compiled and checked against the analysis; a successful attempt references a
-new pending version that still needs approval and activation, and a failed
+Owners and admins can edit a v1 policy version in natural language with
+`POST .../policies/:version/edits` (`instruction`, `Idempotency-Key`), which
+returns `202` with the attempt. Poll `GET .../policy-generations/:attemptId`.
+AI output is validated and compiled; a successful attempt references a new
+pending version that still needs approval and activation, and a failed
 attempt creates no version. `ANTHROPIC_POLICY_MODEL` selects the model.
+Analyses no longer generate whole v1 policies; turning their v2 proposals
+into policy versions, and per-endpoint edits, are the next phase.
 
 ### Telemetry and operations
 

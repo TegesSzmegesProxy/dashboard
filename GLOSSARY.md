@@ -18,17 +18,49 @@
   commit SHA to analyze. It never uploads source files.
 - **Repository binding**: the one GitHub repository an organization
   administrator assigns to a project. Analysis source always comes from it.
-- **Source manifest**: the customer-visible record of which repository files
-  were retained for an analysis, which were excluded and why, and how many
-  values were redacted.
+- **Analysis sandbox**: the disposable, network-less container in which one
+  analysis extracts and indexes the repository. It is destroyed when the
+  analysis ends; the model reaches its content only through read-only tools.
+- **AI read manifest**: the customer-visible record of exactly which paths and
+  line ranges an analysis sent to the AI provider, and how many values were
+  redacted in them. It replaces the earlier source manifest.
 - **Analysis**: an immutable, versioned interpretation of a collector upload
   and the bound repository at its commit,
   including API surface, dependencies, CVEs, environment, and findings with
   provenance.
+- **Environment snapshot**: one immutable, redacted result of
+  `tessera -get-environment` (httpx, Lynis, nmap, nuclei, Trivy) for a tenant,
+  uploaded with a collector key. Analyses use the latest one; without one they
+  run without environment context and say so.
+- **Work item**: one candidate route (or suspected dynamic registration) that
+  an analysis must resolve as an endpoint with evidence, not an endpoint with a
+  reason, or unresolved.
+- **Coverage gate**: the rule that every work item is resolved explicitly; any
+  unresolved item makes the analysis `partial` instead of silently omitting it.
+- **Application dossier**: the short, fixed summary of an application
+  (frameworks, global middleware, auth, prefixes, conventions) that every
+  analysis agent receives.
+- **Route rule**: a structural or regex pattern written by the recon agent that
+  describes how one application registers routes; the sandbox applies it to the
+  whole repository to enumerate work items.
+- **Framework pack**: optional framework-specific extractors that add exact
+  routes and validator hints. Analysis works without one.
+- **Language tier**: how precisely a file can be indexed: text only,
+  syntax-aware (tree-sitter), framework pack, or type-accurate indexer.
 - **Policy version**: immutable human intent plus its validated structured form
   and compilation state. Editing creates a new version.
-- **Policy generation attempt**: one durable request to generate a policy
-  from an analysis or to apply a natural-language edit to a policy version.
+- **Endpoint policy**: one endpoint of a policy version: its endpoint-level
+  tools, JEV context, fields and human-readable policy.
+- **Human-readable policy**: the administrator-editable plain-language
+  description of one endpoint policy. It is never enforced; editing it
+  regenerates that endpoint's structured policy as a new pending version.
+- **JEV context**: bounded free text on an endpoint or field that tells JEV
+  what the element is for and what legitimate input looks like. It is derived
+  from untrusted repository content, reviewed with the policy, and given to
+  JEV as data, never as instructions.
+- **Policy generation attempt**: one durable request to apply a
+  natural-language edit to one endpoint of a policy version (earlier attempts
+  also generated whole policies from an analysis).
   It succeeds with a pending policy version or fails; a failed attempt never
   creates a policy version.
 - **Precision warning**: the fixed notice shown with every AI-generated or

@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { AiModule } from '../../infrastructure/ai/ai.module.js';
-import { AnalysesModule } from '../analyses/analyses.module.js';
 import { AuditModule } from '../audit/audit.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { EventsModule } from '../events/events.module.js';
@@ -16,7 +15,6 @@ import { PolicyGenerationService } from './policy-generation.service.js';
 @Module({
   imports: [
     AiModule,
-    AnalysesModule,
     AuditModule,
     AuthModule,
     EventsModule,

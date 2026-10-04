@@ -13,7 +13,7 @@ deployed proxy in the sibling `../proxy` repository.
 ## System shape
 
 ```text
-Dashboard user -> Frontend -> Control-plane API -> MongoDB / Redis / object storage
+Dashboard user -> Frontend -> Control-plane API -> MongoDB / Redis / secret store
                                     ^       |
                                     |       +-> AI provider (analysis/generation)
                                     |       +-> GitHub (App, read-only source fetch)
@@ -49,9 +49,10 @@ safe metadata; reveal plaintext once at creation.
 
 ```text
 collector upload (commit SHA + environment results)
-  -> source fetch from the bound repository, filtering and redaction
-  -> application analysis
-  -> policy generation or natural-language edit (AI, ADR-0007) or human import
+  -> source fetch from the bound repository into a disposable analysis sandbox
+  -> agentic application analysis producing evidence-backed facts and a
+     pending endpoint policy (ADR-0009, ADR-0010)
+  -> per-endpoint natural-language edit (AI) or human import
   -> schema validation
   -> compilation against the supported tool registry
   -> human approval
@@ -96,10 +97,12 @@ alerts are separate from distribution and never change it.
 - MongoDB is authoritative for organization- and tenant-owned state.
 - Redis supports queues, rate limits, idempotency, caching, and outbox delivery
   coordination. Losing Redis must not corrupt durable state.
-- Raw collector packages live in transient object storage and are deleted
-  when their analysis finishes. Fetched source exists only in worker memory.
-  MongoDB stores upload metadata, the source manifest (retained files,
-  exclusions, redaction counts) and the derived analysis (ADR-0006).
+- Collector uploads keep only metadata; no raw package is stored. Fetched
+  source exists only inside a
+  per-job sandbox (in-memory filesystem, no network) that is destroyed when
+  the analysis ends. MongoDB stores upload metadata, the AI read manifest
+  (path and line ranges sent to the AI provider, redaction counts) and the
+  derived analysis (ADR-0009).
 - Signing keys, the GitHub App private key and provider credentials come from
   deployment secrets or a secret manager, never the database or frontend.
 - Telemetry is best-effort and redacted. It must not affect bundle distribution

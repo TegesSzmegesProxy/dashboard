@@ -48,12 +48,9 @@ services:
       # The replica set advertises localhost, so connect to the member directly.
       MONGODB_URI: mongodb://mongodb:27017/?directConnection=true
       REDIS_URL: redis://redis:6379
-      ANALYSIS_STORAGE_DIR: /app/var/analysis-storage
     ports:
       # Host port 5000 is often taken by the macOS AirPlay Receiver.
       - '127.0.0.1:${API_PORT:-5050}:5000'
-    volumes:
-      - analysis-storage:/app/var/analysis-storage
     depends_on:
       mongodb:
         condition: service_healthy
@@ -63,4 +60,3 @@ services:
 volumes:
   mongodb-data:
   redis-data:
-  analysis-storage:

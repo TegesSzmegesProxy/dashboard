@@ -13,12 +13,6 @@ export class PolicyGenerationParamsDto extends TenantParamsDto {
   attemptId!: string;
 }
 
-export class GeneratePolicyDto {
-  @ApiProperty({ description: 'Completed or partial analysis of this project' })
-  @IsMongoId()
-  analysisId!: string;
-}
-
 export class EditPolicyDto {
   @ApiProperty({
     maxLength: 2_000,
