@@ -162,7 +162,7 @@ function DeleteProject({ project, path }: { project: ProjectT; path: string }) {
             Delete
           </Button>
         </>}>
-        <Input mono placeholder={project.slug} value={typed} onChange={(e) => setTyped(e.target.value)} />
+        <Input label="Project slug" mono placeholder={project.slug} autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} />
       </Dialog>
     </Section>
   );

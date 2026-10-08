@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApi, useResource, type AlertSettings, type OperationalAlert, type OperationsOverview, type TelemetryGranularity, type TelemetrySummary } from '../api';
 import { Badge, Button, Input, Select, Sparkline, StatTile, Tabs } from '../components';
 import { useOrg } from '../Layout';
-import { Loading, Note, pct, Section, SEVERITY, useAction, when } from '../ui';
+import { Loading, Note, num, pct, Section, SEVERITY, telemetryQuery, useAction, when } from '../ui';
 
 const RANGES = {
   hour1: { label: 'Last hour', granularity: 'minute', ms: 3_600_000 },
@@ -26,7 +26,7 @@ export function ProjectOperations({ path }: { path: string }) {
     <div className="stack" style={{ gap: 'var(--space-5)' }}>
       <Overview path={path} />
       <Telemetry path={path} />
-      <div className="grid-main" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
+      <div className="grid-main">
         <Alerts path={path} />
         <AlertSettingsForm path={path} />
       </div>
@@ -40,79 +40,130 @@ function Overview({ path }: { path: string }) {
   if (!o.data) return <Loading what="operations" />;
   const d = o.data;
   const h = d.lastHour;
+  const p = d.proxies;
+  // Only the proxy states that apply, as chips; zero counts are noise.
+  const chips: [number, 'passed' | 'review' | 'jev' | 'blocked' | 'neutral', string][] = [
+    [p.upToDate, 'passed', 'up to date'], [p.restartRequired, 'jev', 'restart required'], [p.incompatible, 'blocked', 'incompatible'],
+    [p.degraded, 'review', 'degraded'], [p.stale, 'neutral', 'stale'], [p.runningLastKnownGood, 'review', 'on last known good'], [p.withoutBundle, 'blocked', 'without bundle'],
+  ];
   return (
     <>
       <div className="stats">
-        <StatTile label="Requests, last hour" value={h.requests} />
-        <StatTile label="Blocked" value={h.decisions.block} unit={`/ ${h.decisions.allow + h.decisions.block}`} />
+        <StatTile label="Requests, last hour" value={num(h.requests)} />
+        <StatTile label="Blocked" value={num(h.decisions.block)} unit={`/ ${num(h.decisions.allow + h.decisions.block)}`} />
         <StatTile label="Attack rate" value={pct(h.attackRate)} />
         <StatTile label="Open alerts" value={d.openAlerts.critical + d.openAlerts.warning + d.openAlerts.info}
           deltaTone={d.openAlerts.critical ? 'bad' : 'neutral'} delta={d.openAlerts.critical ? `${d.openAlerts.critical} critical` : undefined} />
       </div>
-      <div className="actions small muted">
-        <span>Proxies {d.proxies.total}</span>·<span>up to date {d.proxies.upToDate}</span>·
-        <span>restart required {d.proxies.restartRequired}</span>·<span>incompatible {d.proxies.incompatible}</span>·
-        <span>stale {d.proxies.stale}</span>·<span>degraded {d.proxies.degraded}</span>·
-        <span>last known good {d.proxies.runningLastKnownGood}</span>·<span>no bundle {d.proxies.withoutBundle}</span>·
-        <span>last telemetry {when(d.lastTelemetryAt)}</span>
+      <div className="spread" style={{ flexWrap: 'wrap' }}>
+        <span className="chips" style={{ alignItems: 'center' }}>
+          <span className="eyebrow" style={{ marginRight: 'var(--space-1)' }}>{p.total} prox{p.total === 1 ? 'y' : 'ies'}</span>
+          {chips.filter(([n]) => n > 0).map(([n, tone, label]) => <Badge key={label} status={tone}>{n} {label}</Badge>)}
+        </span>
+        <span className="faint small">Last telemetry {when(d.lastTelemetryAt)}</span>
       </div>
     </>
   );
 }
 
+function Metric({ label, value, sub, data, color }: { label: string; value: string; sub?: string; data: number[]; color: string }) {
+  return (
+    <div className="metric">
+      <span className="eyebrow">{label}</span>
+      <span className="metric-value">{value}</span>
+      {sub && <span className="faint small">{sub}</span>}
+      {data.length > 1 && <Sparkline data={data} width={240} height={40} color={color} />}
+    </div>
+  );
+}
+
+function Group({ title, rows }: { title: string; rows: [string, string][] }) {
+  return (
+    <div>
+      <div className="eyebrow">{title}</div>
+      <dl className="kv">{rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+    </div>
+  );
+}
+
 function Telemetry({ path }: { path: string }) {
   const [range, setRange] = useState<RangeId>('hour1');
-  // `to` is rounded to the minute so the request URL is stable between renders.
   const r = RANGES[range];
-  const to = new Date(Math.floor(Date.now() / 60_000) * 60_000);
-  const q = `granularity=${r.granularity}&from=${encodeURIComponent(new Date(to.getTime() - r.ms).toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
-  const t = useResource<TelemetrySummary>(`${path}/telemetry?${q}`);
+  const t = useResource<TelemetrySummary>(`${path}/telemetry?${telemetryQuery(r.granularity, r.ms)}`);
   const d = t.data;
+  const x = d?.totals;
+  const share = (n: number, of: number) => (of ? ` · ${pct(n / of)}` : '');
+  const endpoints = d ? [...d.endpoints].sort((a, b) => b.requests - a.requests) : [];
 
   return (
     <Section title="Traffic telemetry" desc="Redacted counters reported by proxies. Display only: the proxy decides, never this page."
       aside={<Tabs variant="pill" tabs={Object.entries(RANGES).map(([id, v]) => ({ id, label: v.label }))} value={range} onChange={(id) => setRange(id as RangeId)} />}>
       {t.error && <Note tone="error">{t.error}</Note>}
       {!d && !t.error && <Loading what="telemetry" />}
-      {d && (
-        <div className="stack">
-          <div className="grid-3">
-            <div><div className="eyebrow">Requests</div><Sparkline data={d.series.map((p) => p.requests)} width={260} height={48} /></div>
-            <div><div className="eyebrow">Blocked</div><Sparkline data={d.series.map((p) => p.decisions.block)} width={260} height={48} color="var(--clay-600)" /></div>
-            <div><div className="eyebrow">JEV attack</div><Sparkline data={d.series.map((p) => p.jev.attack)} width={260} height={48} color="var(--blue-500)" /></div>
+      {d && x && x.requests === 0 && (
+        <div className="slide">
+          <span className="slide-label">No traffic reported in this range</span>
+          <span className="muted small">Proxies send counters once a minute after their first request.</span>
+        </div>
+      )}
+      {d && x && x.requests > 0 && (
+        <div className="stack" style={{ gap: 'var(--space-5)' }}>
+          <div className="metrics">
+            <Metric label="Requests" value={num(x.requests)} data={d.series.map((p) => p.requests)} color="var(--text-strong)" />
+            <Metric label="Blocked" value={num(x.decisions.block)} sub={`${pct(x.decisions.block / x.requests)} of requests`}
+              data={d.series.map((p) => p.decisions.block)} color="var(--clay-600)" />
+            <Metric label="JEV attacks" value={num(x.jev.attack)} sub={`of ${num(x.jev.attack + x.jev.benign)} classified`}
+              data={d.series.map((p) => p.jev.attack)} color="var(--blue-600)" />
+            <Metric label="Attack rate" value={pct(x.attackRate)} sub={`EWMA ${pct(x.attackRateEwma)}`}
+              data={d.series.map((p) => p.attackRate ?? 0)} color="var(--ochre-600)" />
           </div>
-          <dl className="mono small" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--space-2) var(--space-4)', margin: 0 }}>
-            <div>allow / block: {d.totals.decisions.allow} / {d.totals.decisions.block}</div>
-            <div>safe / suspicious: {d.totals.staticVerdicts.safe} / {d.totals.staticVerdicts.suspicious}</div>
-            <div>policy violation / error: {d.totals.staticVerdicts.policyViolation} / {d.totals.staticVerdicts.error}</div>
-            <div>JEV attack / benign: {d.totals.jev.attack} / {d.totals.jev.benign}</div>
-            <div>JEV sampled safe / unavailable: {d.totals.jev.sampledSafe} / {d.totals.jev.unavailable}</div>
-            <div>failure behavior applied: {d.totals.failureBehaviorApplied}</div>
-            <div>attack rate: {pct(d.totals.attackRate)} (EWMA {pct(d.totals.attackRateEwma)})</div>
-            <div>sampling observed / reported: {pct(d.totals.observedSamplingRate)} / {pct(d.totals.reportedSamplingRate)}</div>
-            <div>bundle verification / pull failures: {d.events.bundleVerificationFailures} / {d.events.bundlePullFailures}</div>
-            <div>dropped windows: {d.events.droppedWindows}</div>
-          </dl>
-          {d.endpoints.length === 0 ? <p className="muted small">No traffic reported in this range.</p> : (
+
+          <div className="groups">
+            <Group title="Decisions" rows={[
+              ['Allowed', num(x.decisions.allow) + share(x.decisions.allow, x.requests)],
+              ['Blocked', num(x.decisions.block) + share(x.decisions.block, x.requests)],
+              ['Failure behavior applied', num(x.failureBehaviorApplied)],
+            ]} />
+            <Group title="Static analysis" rows={[
+              ['Safe', num(x.staticVerdicts.safe)],
+              ['Suspicious', num(x.staticVerdicts.suspicious)],
+              ['Policy violation', num(x.staticVerdicts.policyViolation)],
+              ['Error', num(x.staticVerdicts.error)],
+            ]} />
+            <Group title="JEV" rows={[
+              ['Attack / benign', `${num(x.jev.attack)} / ${num(x.jev.benign)}`],
+              ['Sampled safe', num(x.jev.sampledSafe)],
+              ['Unavailable', num(x.jev.unavailable)],
+              ['Sampling observed / reported', `${pct(x.observedSamplingRate)} / ${pct(x.reportedSamplingRate)}`],
+            ]} />
+            <Group title="Proxy events" rows={[
+              ['Bundle verification failures', num(d.events.bundleVerificationFailures)],
+              ['Bundle pull failures', num(d.events.bundlePullFailures)],
+              ['Dropped windows', num(d.events.droppedWindows)],
+            ]} />
+          </div>
+
+          <div>
+            <div className="eyebrow">Endpoints · {endpoints.length}</div>
             <div className="table-wrap">
               <table className="table">
-                <thead><tr><th>Endpoint</th><th>Requests</th><th>Blocked</th><th>Suspicious</th><th>Violations</th><th>JEV attack</th><th>Attack rate</th></tr></thead>
+                <thead><tr><th>Endpoint</th><th className="num">Requests</th><th className="num">Blocked</th><th className="num">Suspicious</th><th className="num">Violations</th><th className="num">JEV attack</th><th className="num">Attack rate</th></tr></thead>
                 <tbody>
-                  {d.endpoints.map((e) => (
+                  {endpoints.map((e) => (
                     <tr key={e.endpoint ?? '*'}>
                       <td className="mono">{e.endpoint ?? <span className="muted">no policy endpoint matched</span>}</td>
-                      <td className="mono">{e.requests}</td>
-                      <td className="mono">{e.decisions.block}</td>
-                      <td className="mono">{e.staticVerdicts.suspicious}</td>
-                      <td className="mono">{e.staticVerdicts.policyViolation}</td>
-                      <td className="mono">{e.jev.attack}</td>
-                      <td className="mono">{pct(e.attackRate)}</td>
+                      <td className="mono num">{num(e.requests)}</td>
+                      <td className="mono num">{num(e.decisions.block)}</td>
+                      <td className="mono num">{num(e.staticVerdicts.suspicious)}</td>
+                      <td className="mono num">{num(e.staticVerdicts.policyViolation)}</td>
+                      <td className="mono num">{num(e.jev.attack)}</td>
+                      <td className="mono num">{pct(e.attackRate)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
+          </div>
         </div>
       )}
     </Section>

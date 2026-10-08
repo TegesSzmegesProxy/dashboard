@@ -1,4 +1,4 @@
-export type IconName = 'shield'|'shield-check'|'shield-alert'|'shield-x'|'arrow-right'|'arrow-up-right'|'check'|'x'|'chevron-down'|'chevron-right'|'search'|'settings'|'activity'|'gauge'|'file-code'|'terminal'|'server'|'globe'|'lock'|'key-round'|'bell'|'circle-alert'|'info'|'eye'|'filter'|'copy'|'external-link'|'plus'|'minus'|'refresh-cw'|'zap'|'layers'|'git-branch'|'book-open'|'log-out'|'user'|'clock'|'scan-line'|'route'|'database'|'sliders-horizontal'|'ellipsis'|'play'|'pause'|'landmark'|'ticket';
+export type IconName = 'shield'|'shield-check'|'shield-alert'|'shield-x'|'arrow-right'|'arrow-up-right'|'check'|'x'|'chevron-down'|'chevron-right'|'search'|'settings'|'activity'|'gauge'|'file-code'|'terminal'|'server'|'globe'|'lock'|'key-round'|'bell'|'circle-alert'|'info'|'eye'|'filter'|'copy'|'external-link'|'plus'|'minus'|'refresh-cw'|'zap'|'layers'|'git-branch'|'book-open'|'log-out'|'user'|'clock'|'scan-line'|'route'|'database'|'sliders-horizontal'|'ellipsis'|'play'|'pause'|'landmark'|'ticket'|'menu';
 export interface IconProps {
   /** Lucide icon name (subset copied into the system) */
   name: IconName;

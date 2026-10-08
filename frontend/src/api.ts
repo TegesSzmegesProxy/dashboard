@@ -645,7 +645,9 @@ export function useResource<T>(path: string | null, allow404 = false) {
     data: T | null;
     error: string | null;
     loading: boolean;
-  }>({ data: null, error: null, loading: true });
+    /** The path `data` belongs to: a reload keeps it on screen, a new path does not. */
+    for: string | null;
+  }>({ data: null, error: null, loading: true, for: null });
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -653,12 +655,12 @@ export function useResource<T>(path: string | null, allow404 = false) {
     let live = true;
     setState((s) => ({ ...s, loading: true }));
     api<T>(path).then(
-      (data) => live && setState({ data, error: null, loading: false }),
+      (data) => live && setState({ data, error: null, loading: false, for: path }),
       (e: unknown) => {
         if (!live) return;
         if (allow404 && e instanceof ApiError && e.status === 404)
-          setState({ data: null, error: null, loading: false });
-        else setState({ data: null, error: errorText(e), loading: false });
+          setState({ data: null, error: null, loading: false, for: path });
+        else setState({ data: null, error: errorText(e), loading: false, for: path });
       },
     );
     return () => {
@@ -666,7 +668,13 @@ export function useResource<T>(path: string | null, allow404 = false) {
     };
   }, [api, path, allow404, tick]);
 
-  return { ...state, reload: useCallback(() => setTick((t) => t + 1), []) };
+  const current = state.for === path;
+  return {
+    data: current ? state.data : null,
+    error: current ? state.error : null,
+    loading: current ? state.loading : true,
+    reload: useCallback(() => setTick((t) => t + 1), []),
+  };
 }
 
 /** Cursor-paginated list with "load more". */

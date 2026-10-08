@@ -1,6 +1,6 @@
 import { useAuth0 } from '@auth0/auth0-react';
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useResource, type Organization, type Page, type Project } from './api';
 import { Badge, Button, Icon, IconButton, type IconName } from './components';
 import { Loading, Note } from './ui';
@@ -31,15 +31,27 @@ export function useOrg(): OrgCtx {
 }
 
 export function Layout() {
-  const { orgId = '', tenantId } = useParams();
+  const { orgId = '', tenantId, section } = useParams();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { user, logout } = useAuth0();
   const orgs = useResource<Page<Organization>>('/organizations?limit=100');
   const org = useResource<Organization>(`/organizations/${orgId}`);
   // ponytail: sidebar shows the first 100 projects; add paging when an org outgrows it.
   const projects = useResource<Page<Project>>(`/organizations/${orgId}/projects?limit=100`);
+  // Narrow screens: the sidebar is a menu that closes once a link is followed.
+  const [navOpen, setNavOpen] = useState(false);
+  const [navFor, setNavFor] = useState(pathname);
+  if (navFor !== pathname) { setNavFor(pathname); setNavOpen(false); }
 
-  if (org.error) return <div className="center"><Note tone="error">{org.error}</Note></div>;
+  if (org.error) return (
+    <div className="center">
+      <div className="stack">
+        <Note tone="error">{org.error}</Note>
+        <Link to="/">Back to your organizations</Link>
+      </div>
+    </div>
+  );
   if (!org.data) return <div className="center"><Loading what="organization" /></div>;
 
   const base = `/orgs/${orgId}`;
@@ -54,10 +66,14 @@ export function Layout() {
   const userName = user?.name && !user.name.includes('@') ? user.name : user?.nickname ?? 'Signed in';
   try { localStorage.setItem('tessera.org', orgId); } catch { /* storage unavailable */ }
 
+  const project = ctx.projects.find((p) => p.id === tenantId);
+  const sectionLabel = PROJECT_SECTIONS.find((s) => s.id === section)?.label;
+
   return (
     <Ctx.Provider value={ctx}>
-      <div className="app">
-        <aside className="sidebar">
+      <div className={navOpen ? 'app nav-open' : 'app'}>
+        <a className="skip-link" href="#content">Skip to content</a>
+        <aside className="sidebar" id="sidebar">
           <Link to={base} className="wordmark">TESSERA</Link>
           <nav className="nav" aria-label="Primary">
             <NavLink to={base} end><Icon name="gauge" />Dashboard</NavLink>
@@ -85,9 +101,20 @@ export function Layout() {
         </aside>
         <div className="main">
           <header className="topbar">
-            <div className="crumbs"><strong>{org.data.name}</strong></div>
+            <span className="menu-toggle">
+              <IconButton icon={navOpen ? 'x' : 'menu'} label={navOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={navOpen} aria-controls="sidebar" onClick={() => setNavOpen(!navOpen)} />
+            </span>
+            <nav className="crumbs" aria-label="Breadcrumb">
+              {project ? <Link to={base}>{org.data.name}</Link> : <strong>{org.data.name}</strong>}
+              {project && <>
+                <span aria-hidden="true">/</span>
+                {sectionLabel ? <Link to={`${base}/projects/${project.id}/overview`}>{project.name}</Link> : <strong>{project.name}</strong>}
+              </>}
+              {project && sectionLabel && <><span aria-hidden="true">/</span><strong aria-current="page">{sectionLabel}</strong></>}
+            </nav>
           </header>
-          <main className="content">
+          <main className="content" id="content" tabIndex={-1}>
             <Outlet />
           </main>
         </div>

@@ -140,9 +140,7 @@ function OverridesForm({ path, initial, reload }: { path: string; initial: Endpo
         <article key={i} className="endpoint" style={{ marginBottom: 0 }}>
           <header>
             <span className="actions">
-              <select aria-label="Method" className="mono" value={e.method} onChange={(ev) => patch(i, { method: ev.target.value as HttpMethod })}>
-                {METHODS.map((m) => <option key={m}>{m}</option>)}
-              </select>
+              <Select aria-label="Method" mono value={e.method} options={METHODS} onChange={(ev) => patch(i, { method: ev.target.value as HttpMethod })} />
               <Input aria-label="Path" mono placeholder="/v1/checkout" value={e.path} error={e.path && !/^\/\S*$/.test(e.path) ? 'Starts with /' : undefined} onChange={(ev) => patch(i, { path: ev.target.value })} />
             </span>
             <span className="actions">
